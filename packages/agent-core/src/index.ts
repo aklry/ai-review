@@ -5,7 +5,12 @@ import {
   type CompetencyScores,
 } from '@interview-assistant/contracts';
 
-const competencies: Competency[] = ['vue-react', 'ai-application', 'system-design', 'project-depth'];
+const competencies: Competency[] = [
+  'vue-react',
+  'ai-application',
+  'system-design',
+  'project-depth',
+];
 
 export function calculateWeightedScore(scores: CompetencyScores): number {
   const validScores = competencyScoresSchema.parse(scores);

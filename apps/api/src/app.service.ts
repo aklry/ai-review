@@ -8,12 +8,13 @@ export class AppService {
       service: 'interview-assistant-api',
       status: 'ok' as const,
       timestamp: new Date().toISOString(),
-      scoringReady: calculateWeightedScore({
-        'vue-react': 5,
-        'ai-application': 5,
-        'system-design': 5,
-        'project-depth': 5,
-      }) === 100,
+      scoringReady:
+        calculateWeightedScore({
+          'vue-react': 5,
+          'ai-application': 5,
+          'system-design': 5,
+          'project-depth': 5,
+        }) === 100,
     };
   }
 }

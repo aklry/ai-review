@@ -13,6 +13,7 @@
 ### Task 1: Create workspace and repository tooling
 
 **Files:**
+
 - Create: `package.json`
 - Create: `pnpm-workspace.yaml`
 - Create: `turbo.json`
@@ -33,6 +34,7 @@
 ### Task 2: Add shared configuration packages
 
 **Files:**
+
 - Create: `packages/contracts/package.json`
 - Create: `packages/contracts/tsconfig.json`
 - Create: `packages/contracts/src/index.ts`
@@ -48,6 +50,7 @@
 ### Task 3: Scaffold NestJS API and worker
 
 **Files:**
+
 - Create: `apps/api/package.json`
 - Create: `apps/api/tsconfig.json`
 - Create: `apps/api/nest-cli.json`
@@ -67,6 +70,7 @@
 ### Task 4: Scaffold Vue/Electron desktop
 
 **Files:**
+
 - Create: `apps/desktop/package.json`
 - Create: `apps/desktop/electron.vite.config.ts`
 - Create: `apps/desktop/tsconfig.json`
@@ -87,6 +91,7 @@
 ### Task 5: Add local infrastructure and developer documentation
 
 **Files:**
+
 - Create: `infra/docker/docker-compose.yml`
 - Create: `README.md`
 - Create: `.env.example`

@@ -36,15 +36,17 @@ describe('API response envelope', () => {
   });
 
   it('hides unexpected exception details behind a generic message', () => {
-    expect(normalizeException(new Error('database password leaked'), requestId, timestamp)).toEqual({
-      httpStatus: 500,
-      body: {
-        code: 500,
-        message: 'Internal server error',
-        data: null,
-        requestId,
-        timestamp,
+    expect(normalizeException(new Error('database password leaked'), requestId, timestamp)).toEqual(
+      {
+        httpStatus: 500,
+        body: {
+          code: 500,
+          message: 'Internal server error',
+          data: null,
+          requestId,
+          timestamp,
+        },
       },
-    });
+    );
   });
 });

@@ -34,13 +34,16 @@ export const questionInventory = {
   'ai-application': { total: 24, l1: 7, l2: 12, l3: 5, core: 6 },
   'system-design': { total: 36, l1: 10, l2: 18, l3: 8, core: 8 },
   'project-depth': { total: 48, l1: 14, l2: 24, l3: 10, core: 10 },
-} as const satisfies Record<Competency, {
-  total: number;
-  l1: number;
-  l2: number;
-  l3: number;
-  core: number;
-}>;
+} as const satisfies Record<
+  Competency,
+  {
+    total: number;
+    l1: number;
+    l2: number;
+    l3: number;
+    core: number;
+  }
+>;
 
 export const healthResponseSchema = z.object({
   service: z.string(),

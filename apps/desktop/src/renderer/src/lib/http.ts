@@ -61,10 +61,7 @@ export function createHttpClient({ baseURL, createRequestId }: HttpClientOptions
   return client;
 }
 
-export async function request<T>(
-  config: AxiosRequestConfig,
-  client = apiClient,
-): Promise<T> {
+export async function request<T>(config: AxiosRequestConfig, client = apiClient): Promise<T> {
   const response = await client.request<ApiResponse<T>>(config);
   if (response.data.code !== 0) {
     throw new ApiClientError({
@@ -78,9 +75,7 @@ export async function request<T>(
 }
 
 const defaultApiBaseUrl =
-  typeof window === 'undefined'
-    ? 'http://localhost:3000/api'
-    : window.desktopApi.apiBaseUrl;
+  typeof window === 'undefined' ? 'http://localhost:3000/api' : window.desktopApi.apiBaseUrl;
 
 export const apiClient = createHttpClient({
   baseURL: defaultApiBaseUrl,

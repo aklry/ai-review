@@ -20,8 +20,7 @@ export const useSystemStore = defineStore('system', () => {
     } catch (error) {
       health.value = null;
       status.value = 'offline';
-      errorMessage.value =
-        error instanceof ApiClientError ? error.message : '无法连接到 API 服务';
+      errorMessage.value = error instanceof ApiClientError ? error.message : '无法连接到 API 服务';
     }
   }
 

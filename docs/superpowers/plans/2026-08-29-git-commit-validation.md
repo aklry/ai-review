@@ -22,11 +22,13 @@
 ### Task 1: Initialize Repository and Add Commitlint Dependencies
 
 **Files:**
+
 - Create: `.git/` (Git metadata, not versioned)
 - Modify: `package.json`
 - Modify: `pnpm-lock.yaml`
 
 **Interfaces:**
+
 - Consumes: root `package.json` declares pnpm 10.34.5.
 - Produces: a Git repository on branch `master` and root-level `commitlint` and `husky` executables available through `pnpm exec`.
 
@@ -57,11 +59,13 @@ Expected: Commitlint prints a version and exits zero.
 ### Task 2: Configure Conventional Commit Validation and the Git Hook
 
 **Files:**
+
 - Create: `commitlint.config.mjs`
 - Create: `.husky/commit-msg`
 - Modify: `package.json`
 
 **Interfaces:**
+
 - Consumes: `@commitlint/cli` and `@commitlint/config-conventional` installed at the root.
 - Produces: `pnpm exec commitlint --edit <message-file>` validates Conventional Commits, and Git invokes it from `.husky/commit-msg`.
 
@@ -119,9 +123,11 @@ Expected: non-zero exit with Commitlint's `type-empty` violation.
 ### Task 3: Run Project and Tooling Verification
 
 **Files:**
+
 - Verify only: `package.json`, `pnpm-lock.yaml`, `commitlint.config.mjs`, `.husky/commit-msg`
 
 **Interfaces:**
+
 - Consumes: completed Git, Commitlint, and Husky setup.
 - Produces: evidence that the configured validation and existing workspace checks remain functional.
 

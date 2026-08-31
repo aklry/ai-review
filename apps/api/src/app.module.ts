@@ -9,8 +9,6 @@ import { AppService } from './app.service.js';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer
-      .apply(RequestIdMiddleware)
-      .forRoutes({ path: '{*path}', method: RequestMethod.ALL });
+    consumer.apply(RequestIdMiddleware).forRoutes({ path: '{*path}', method: RequestMethod.ALL });
   }
 }

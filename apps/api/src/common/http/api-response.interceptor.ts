@@ -1,4 +1,9 @@
-import { Injectable, type CallHandler, type ExecutionContext, type NestInterceptor } from '@nestjs/common';
+import {
+  Injectable,
+  type CallHandler,
+  type ExecutionContext,
+  type NestInterceptor,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Request } from 'express';
 import { map, type Observable } from 'rxjs';

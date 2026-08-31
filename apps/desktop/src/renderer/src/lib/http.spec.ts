@@ -5,9 +5,7 @@ import { ApiClientError, createHttpClient, request } from './http.js';
 
 type HealthData = { service: string };
 
-function successAdapter(
-  capture: (config: InternalAxiosRequestConfig) => void,
-): AxiosAdapter {
+function successAdapter(capture: (config: InternalAxiosRequestConfig) => void): AxiosAdapter {
   return async (config) => {
     capture(config);
     return {
@@ -65,7 +63,9 @@ describe('HTTP client', () => {
       throw new AxiosError('Request failed', 'ERR_BAD_REQUEST', config, undefined, response);
     };
 
-    await expect(request<HealthData>({ method: 'GET', url: '/health' }, client)).rejects.toMatchObject(
+    await expect(
+      request<HealthData>({ method: 'GET', url: '/health' }, client),
+    ).rejects.toMatchObject(
       new ApiClientError({
         code: 400,
         message: 'email must be an email',

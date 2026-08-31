@@ -12,8 +12,8 @@ export default tseslint.config(
       '**/out/**',
       '**/coverage/**',
       '**/.turbo/**',
-      '**/generated/**'
-    ]
+      '**/generated/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -23,9 +23,9 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: true,
-        tsconfigRootDir: import.meta.dirname
-      }
-    }
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
   },
   {
     files: ['**/*.vue'],
@@ -34,31 +34,31 @@ export default tseslint.config(
         parser: tseslint.parser,
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
-        extraFileExtensions: ['.vue']
-      }
-    }
+        extraFileExtensions: ['.vue'],
+      },
+    },
   },
   {
     files: ['**/*.{js,mjs,cjs,ts,mts,cts,vue}'],
     languageOptions: {
       globals: {
         ...globals.browser,
-        ...globals.node
-      }
+        ...globals.node,
+      },
     },
     rules: {
       'no-console': ['warn', { allow: ['info', 'warn', 'error'] }],
-      'vue/multi-word-component-names': 'off'
-    }
+      'vue/multi-word-component-names': 'off',
+    },
   },
   {
     files: ['**/*.{ts,mts,cts,vue}'],
     rules: {
       '@typescript-eslint/consistent-type-imports': [
         'error',
-        { prefer: 'type-imports', fixStyle: 'separate-type-imports' }
-      ]
-    }
+        { prefer: 'type-imports', fixStyle: 'separate-type-imports' },
+      ],
+    },
   },
-  eslintConfigPrettier
+  eslintConfigPrettier,
 );
