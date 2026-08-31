@@ -1,0 +1,17 @@
+node_modules/
+dist/
+out/
+coverage/
+.turbo/
+.cache/
+.env
+.env.*
+!.env.example
+*.log
+*.local
+*.tsbuildinfo
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+Thumbs.db
