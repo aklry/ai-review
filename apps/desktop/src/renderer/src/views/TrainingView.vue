@@ -302,7 +302,11 @@ function stopAnalysisPolling(): void {
 }
 
 async function pollAnalysisOnce(): Promise<void> {
-  if (!analysisJobId.value || analysisStatus.value === 'completed' || analysisStatus.value === 'failed') {
+  if (
+    !analysisJobId.value ||
+    analysisStatus.value === 'completed' ||
+    analysisStatus.value === 'failed'
+  ) {
     stopAnalysisPolling();
     return;
   }

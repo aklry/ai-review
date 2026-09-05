@@ -174,7 +174,9 @@ describe('InterviewService', () => {
       expect.objectContaining({ profileId: 'profile_1', targetRole: 'AI Frontend Engineer' }),
     );
     expect(result).toMatchObject({ id: 'job_1', analysis: null, analysisStatus: 'processing' });
-    await vi.waitFor(() => expect(repository.updateJobAnalysis).toHaveBeenCalledWith('job_1', jobAnalysis));
+    await vi.waitFor(() =>
+      expect(repository.updateJobAnalysis).toHaveBeenCalledWith('job_1', jobAnalysis),
+    );
   });
 
   it('marks the analysis job failed when background generation fails', async () => {

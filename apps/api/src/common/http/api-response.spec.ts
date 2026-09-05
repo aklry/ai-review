@@ -71,7 +71,11 @@ describe('API response envelope', () => {
 
   it('normalizes gateway timeout errors as a retryable response', () => {
     expect(
-      normalizeException(new GatewayTimeoutException('DeepSeek generation timed out'), requestId, timestamp),
+      normalizeException(
+        new GatewayTimeoutException('DeepSeek generation timed out'),
+        requestId,
+        timestamp,
+      ),
     ).toEqual({
       httpStatus: 504,
       body: {

@@ -204,7 +204,9 @@ describe('InterviewRepository', () => {
     };
     const repository = new InterviewRepository(prisma as never);
 
-    await expect(repository.markJobAnalysisFailed('job_1', 'provider timeout')).resolves.toMatchObject({
+    await expect(
+      repository.markJobAnalysisFailed('job_1', 'provider timeout'),
+    ).resolves.toMatchObject({
       id: 'job_1',
       analysisStatus: 'failed',
       analysisError: 'provider timeout',
