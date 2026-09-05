@@ -8,19 +8,27 @@
     "start": "node dist/main.js",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests src",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "prisma:studio": "prisma studio --schema prisma/schema.prisma",
+    "prisma:reset": "prisma migrate reset"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1124.0",
     "@interview-assistant/agent-core": "workspace:*",
     "@interview-assistant/contracts": "workspace:*",
-    "@nestjs/common": "^11.0.11",
+    "@nestjs/common": "^11.0.16",
     "@nestjs/config": "^4.0.4",
-    "@nestjs/core": "^11.0.11",
+    "@nestjs/core": "^11.0.16",
     "@nestjs/platform-express": "^11.0.11",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "dotenv": "^17.4.2",
+    "jszip": "^3.10.1",
+    "pdfjs-dist": "^6.3.289",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
@@ -32,6 +40,8 @@
     "@nestjs/testing": "^11.0.11",
     "@swc/cli": "^0.8.1",
     "@swc/core": "^1.16.1",
-    "@types/express": "^5.0.1"
+    "@types/express": "^5.0.1",
+    "@types/pg": "^8.23.1",
+    "prisma": "7.10.0"
   }
 }

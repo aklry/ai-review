@@ -13,6 +13,8 @@ type ApiErrorOptions = {
   status: number | undefined;
 };
 
+export const DEFAULT_API_TIMEOUT_MS = 180_000;
+
 export class ApiClientError extends Error {
   readonly code: number;
   readonly requestId: string | undefined;
@@ -30,7 +32,7 @@ export class ApiClientError extends Error {
 export function createHttpClient({ baseURL, createRequestId }: HttpClientOptions): AxiosInstance {
   const client = axios.create({
     baseURL,
-    timeout: 45_000,
+    timeout: DEFAULT_API_TIMEOUT_MS,
     headers: {
       Accept: 'application/json',
     },
@@ -105,7 +107,10 @@ function toApiClientError(error: unknown): ApiClientError {
 
     return new ApiClientError({
       code: error.response?.status ?? 0,
-      message: error.message || 'Network request failed',
+      message:
+        error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT'
+          ? '请求超时，请稍后重试'
+          : error.message || 'Network request failed',
       requestId: error.response?.headers['x-request-id'],
       status: error.response?.status,
     });

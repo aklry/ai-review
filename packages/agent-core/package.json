@@ -17,9 +17,10 @@
     "dev": "tsc -p tsconfig.json --watch",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests src"
   },
   "dependencies": {
-    "@interview-assistant/contracts": "workspace:*"
+    "@interview-assistant/contracts": "workspace:*",
+    "zod": "^3.24.2"
   }
 }

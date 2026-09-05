@@ -15,7 +15,7 @@
 - ESLint flat config 与 Prettier
 - PostgreSQL、Redis、MinIO 本地 Compose
 
-依赖没有安装，仓库中也不会提交 `pnpm-lock.yaml`。这是刻意保留给项目维护者执行的步骤。
+依赖需要由项目维护者执行 `pnpm install` 安装；MinIO、PostgreSQL 和 Redis 通过本地 Compose 启动。
 
 ## 安装依赖
 
@@ -30,7 +30,7 @@ pnpm install
 复制环境变量样例后按需修改：
 
 ```bash
-cp .env.example .env
+cp .env.example apps/api/.env
 docker compose -f infra/docker/docker-compose.yml up -d
 pnpm dev
 ```
@@ -38,14 +38,30 @@ pnpm dev
 Windows PowerShell 可使用：
 
 ```powershell
-Copy-Item .env.example .env
+Copy-Item .env.example apps/api/.env
+pnpm install
+pnpm -F @interview-assistant/api prisma:generate
+pnpm -F @interview-assistant/api prisma:migrate
 docker compose -f infra/docker/docker-compose.yml up -d
 pnpm dev
 ```
 
 API 健康检查：`http://localhost:3000/api/health`
 
-桌面端开发窗口由 electron-vite 启动。生产模型 API Key 只能放在服务端 Secret 管理系统中，不能写入 `.env`、Electron 安装包或 renderer 代码。
+桌面端开发窗口由 electron-vite 启动。API 服务读取 `apps/api/.env`。生产模型 API Key 只能放在服务端 Secret 管理系统中，不能写入 Electron 安装包或 renderer 代码。
+
+## 简历文件上传
+
+训练页的候选人档案默认使用文件上传：
+
+- 支持文本型 PDF 和 DOCX，单个文件默认最大 10 MB。
+- 原始文件保存到私有 MinIO bucket `interview-resumes`。
+- PostgreSQL 只保存文件元数据、解析状态和解析后的 `resumeText`。
+- 旧版 `.doc`、扫描 PDF 暂不直接解析；请另存为 DOCX 或文本型 PDF。
+- API 路由为 `POST /api/profiles/resume`，使用 `multipart/form-data` 的 `file` 字段。
+- 解析失败时，桌面端可以切换到手动粘贴文本的兼容入口。
+
+MinIO 配置优先使用 `MINIO_*` 环境变量；现有 `S3_ENDPOINT`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`、`S3_BUCKET` 仍可作为兼容配置。
 
 ## API 约定
 
@@ -94,4 +110,5 @@ infra/
   docker/    PostgreSQL、Redis、MinIO
 docs/
   interview-assistant-agent-solution.md  产品与技术方案
+  superpowers/specs/2026-09-02-resume-document-upload-design.md  简历文件上传设计
 ```

@@ -27,6 +27,19 @@ export function normalizeException(
   requestId: string,
   timestamp = new Date().toISOString(),
 ): NormalizedException {
+  if (isMultipartSizeError(exception)) {
+    return {
+      httpStatus: HttpStatus.BAD_REQUEST,
+      body: {
+        code: HttpStatus.BAD_REQUEST,
+        message: '简历文件不能超过 10 MB',
+        data: null,
+        requestId,
+        timestamp,
+      },
+    };
+  }
+
   if (exception instanceof HttpException) {
     const httpStatus = exception.getStatus();
     return {
@@ -51,6 +64,15 @@ export function normalizeException(
       timestamp,
     },
   };
+}
+
+function isMultipartSizeError(exception: unknown): boolean {
+  return (
+    typeof exception === 'object' &&
+    exception !== null &&
+    'code' in exception &&
+    exception.code === 'LIMIT_FILE_SIZE'
+  );
 }
 
 function getHttpExceptionMessage(exception: HttpException): string {

@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, GatewayTimeoutException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import { createSuccessResponse, normalizeException } from './api-response.js';
 
@@ -48,5 +48,39 @@ describe('API response envelope', () => {
         },
       },
     );
+  });
+
+  it('normalizes multipart size errors as a user-actionable bad request', () => {
+    expect(
+      normalizeException(
+        Object.assign(new Error('File too large'), { code: 'LIMIT_FILE_SIZE' }),
+        requestId,
+        timestamp,
+      ),
+    ).toEqual({
+      httpStatus: 400,
+      body: {
+        code: 400,
+        message: '简历文件不能超过 10 MB',
+        data: null,
+        requestId,
+        timestamp,
+      },
+    });
+  });
+
+  it('normalizes gateway timeout errors as a retryable response', () => {
+    expect(
+      normalizeException(new GatewayTimeoutException('DeepSeek generation timed out'), requestId, timestamp),
+    ).toEqual({
+      httpStatus: 504,
+      body: {
+        code: 504,
+        message: 'DeepSeek generation timed out',
+        data: null,
+        requestId,
+        timestamp,
+      },
+    });
   });
 });

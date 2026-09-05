@@ -1,0 +1,104 @@
+import type {
+  AnswerSubmitInput,
+  EvaluationReport,
+  InterviewQuestion,
+  InterviewSessionCreateInput,
+  JobRecord,
+  JobAnalyzeInput,
+  ProfileInput,
+  ResumeDocumentSummary,
+  StoryInput,
+} from '@interview-assistant/contracts';
+import { request, apiClient } from '../lib/http.js';
+
+export type ProfileRecord = {
+  id: string;
+  resumeText: string;
+  displayName: string | null;
+  resumeSource?: 'file' | 'text';
+  resumeDocument?: ResumeDocumentSummary | null;
+};
+
+export type SessionRecord = {
+  id: string;
+  status: string;
+  currentQuestionIndex: number;
+  questions: InterviewQuestion[];
+};
+
+export type CoachingResult = {
+  cue: {
+    competency: string;
+    score: number;
+    strengths: string[];
+    gaps: string[];
+    nextAction: string;
+    evidence: Array<{ source: string; quote: string }>;
+    followUpQuestion?: string;
+  };
+  nextQuestion: InterviewQuestion | null;
+  degraded: boolean;
+  model: string;
+};
+
+export function createProfile(input: ProfileInput): Promise<ProfileRecord> {
+  return request({ method: 'POST', url: '/profiles', data: input });
+}
+
+export function uploadResume(
+  file: File,
+  displayName?: string,
+  onProgress?: (percentage: number) => void,
+): Promise<ProfileRecord> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (displayName?.trim()) {
+    formData.append('displayName', displayName.trim());
+  }
+
+  return request(
+    {
+      method: 'POST',
+      url: '/profiles/resume',
+      data: formData,
+      onUploadProgress: (event) => {
+        if (event.total && onProgress) {
+          onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+        }
+      },
+    },
+    apiClient,
+  );
+}
+
+export function analyzeJob(input: JobAnalyzeInput): Promise<JobRecord> {
+  return request({ method: 'POST', url: '/jobs/analyze', data: input });
+}
+
+export function getJob(jobId: string): Promise<JobRecord> {
+  return request({ method: 'GET', url: `/jobs/${jobId}` });
+}
+
+export function createStory(profileId: string, input: StoryInput) {
+  return request({ method: 'POST', url: `/stories/${profileId}`, data: input });
+}
+
+export function createInterviewSession(input: InterviewSessionCreateInput): Promise<SessionRecord> {
+  return request({ method: 'POST', url: '/interview-sessions', data: input });
+}
+
+export function submitAnswer(sessionId: string, input: AnswerSubmitInput): Promise<CoachingResult> {
+  return request({ method: 'POST', url: `/interview-sessions/${sessionId}/answers`, data: input });
+}
+
+export function finishInterviewSession(sessionId: string): Promise<EvaluationReport> {
+  return request({ method: 'POST', url: `/interview-sessions/${sessionId}/finish` });
+}
+
+export function getInterviewSession(sessionId: string): Promise<SessionRecord> {
+  return request({ method: 'GET', url: `/interview-sessions/${sessionId}` });
+}
+
+export function getReport(sessionId: string): Promise<EvaluationReport> {
+  return request({ method: 'GET', url: `/reports/${sessionId}` });
+}

@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
-import { scoreWeights, type Competency } from '@interview-assistant/contracts';
+import type { Competency } from '@interview-assistant/contracts';
 import { useSystemStore } from '../stores/system.js';
+
+const scoreWeights: Record<Competency, number> = {
+  'vue-react': 10,
+  'ai-application': 20,
+  'system-design': 30,
+  'project-depth': 40,
+};
 
 const systemStore = useSystemStore();
 const { errorMessage, health, status } = storeToRefs(systemStore);

@@ -2,8 +2,11 @@ import { Module, RequestMethod, type MiddlewareConsumer, type NestModule } from 
 import { RequestIdMiddleware } from './common/http/request-id.middleware.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
+import { InterviewModule } from './interview/interview.module.js';
+import { ResumeModule } from './resume/resume.module.js';
 
 @Module({
+  imports: [InterviewModule, ResumeModule],
   controllers: [AppController],
   providers: [AppService],
 })

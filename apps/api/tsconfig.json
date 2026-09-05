@@ -13,5 +13,5 @@
     "verbatimModuleSyntax": false,
     "noEmit": false
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "prisma.config.ts"]
 }

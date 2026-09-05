@@ -1,9 +1,13 @@
 import 'reflect-metadata';
+import dotenv from 'dotenv';
+import { join } from 'node:path';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ApiExceptionFilter } from './common/http/api-exception.filter.js';
 import { ApiResponseInterceptor } from './common/http/api-response.interceptor.js';
 import { AppModule } from './app.module.js';
+
+dotenv.config({ path: join(process.cwd(), '.env') });
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);

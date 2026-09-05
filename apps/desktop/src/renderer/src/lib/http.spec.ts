@@ -1,7 +1,8 @@
 import { AxiosError, type AxiosAdapter, type InternalAxiosRequestConfig } from 'axios';
 import { describe, expect, it } from 'vitest';
 import type { ApiResponse } from '@interview-assistant/contracts';
-import { ApiClientError, createHttpClient, request } from './http.js';
+import { ApiClientError, apiClient, createHttpClient, request } from './http.js';
+import { uploadResume } from '../api/interview.js';
 
 type HealthData = { service: string };
 
@@ -25,6 +26,15 @@ function successAdapter(capture: (config: InternalAxiosRequestConfig) => void): 
 }
 
 describe('HTTP client', () => {
+  it('leaves response time after the server model budget', () => {
+    const client = createHttpClient({
+      baseURL: 'http://localhost:3000/api',
+      createRequestId: () => 'req_client',
+    });
+
+    expect(client.defaults.timeout).toBe(180_000);
+  });
+
   it('adds a request ID and unwraps a successful API envelope', async () => {
     let capturedConfig: InternalAxiosRequestConfig | undefined;
     const client = createHttpClient({
@@ -72,6 +82,39 @@ describe('HTTP client', () => {
         requestId: 'req_server',
         status: 400,
       }),
+    );
+  });
+
+  it('lets the browser generate the multipart boundary for resume uploads', async () => {
+    let capturedConfig: InternalAxiosRequestConfig | undefined;
+    apiClient.defaults.adapter = async (config) => {
+      capturedConfig = config;
+      return {
+        data: {
+          code: 0,
+          message: 'ok',
+          data: {
+            id: 'profile_1',
+            resumeText: 'Ada Lovelace frontend engineer with measurable impact.',
+            displayName: null,
+            resumeSource: 'file',
+            resumeDocument: null,
+          },
+          requestId: 'req_server',
+          timestamp: '2026-08-25T00:00:00.000Z',
+        },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      };
+    };
+
+    await uploadResume(new File(['resume'], 'resume.pdf', { type: 'application/pdf' }));
+
+    const contentType = capturedConfig?.headers.get('Content-Type');
+    expect(typeof contentType === 'string' ? contentType.toLowerCase() : contentType).not.toBe(
+      'multipart/form-data',
     );
   });
 });
