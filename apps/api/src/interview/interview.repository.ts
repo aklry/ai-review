@@ -114,6 +114,18 @@ export class InterviewRepository {
     });
   }
 
+  async retryFailedJob(jobId: string): Promise<boolean> {
+    const result = await this.prisma.job.updateMany({
+      where: { id: jobId, analysisStatus: 'failed' },
+      data: {
+        analysis: Prisma.DbNull,
+        analysisStatus: 'processing',
+        analysisError: null,
+      },
+    });
+    return result.count === 1;
+  }
+
   createStory(profileId: string, input: StoryInput) {
     return this.prisma.story.create({
       data: {
@@ -149,8 +161,14 @@ export class InterviewRepository {
         mode: 'simulation',
       },
     });
+    const persistedQuestions = questions.map((question, order) => ({
+      ...question,
+      // Model-provided ids are not database ids. Scope them to this session and
+      // order so repeated model output cannot violate InterviewQuestion.id.
+      id: `${session.id}:${order}:${question.id}`,
+    }));
     await this.prisma.interviewQuestion.createMany({
-      data: questions.map((question, order) => ({
+      data: persistedQuestions.map((question, order) => ({
         sessionId: session.id,
         order,
         id: question.id,
@@ -161,7 +179,7 @@ export class InterviewRepository {
       })),
     });
 
-    return { id: session.id, planId: plan.id, questions };
+    return { id: session.id, planId: plan.id, questions: persistedQuestions };
   }
 
   async saveAnswerFeedback(input: {

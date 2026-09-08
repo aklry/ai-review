@@ -130,7 +130,9 @@ export const jobRecordSchema = z.object({
 export type JobRecord = z.infer<typeof jobRecordSchema>;
 
 export const questionSchema = z.object({
-  id: z.string().trim().min(1),
+  // IDs are assigned by the API after generation; accepting an omitted ID
+  // keeps model output compatible while preserving a required string type.
+  id: z.string().trim().min(1).default(''),
   competency: competencySchema,
   difficulty: difficultySchema,
   prompt: z.string().trim().min(1),

@@ -70,6 +70,7 @@ function createRepositoryMock() {
       stories: [],
     })),
     findJobByInput: vi.fn(async () => null),
+    retryFailedJob: vi.fn(async () => true),
     createJob: vi.fn(async () => ({
       id: 'job_1',
       profileId: 'profile_1',
@@ -174,6 +175,9 @@ describe('InterviewService', () => {
       expect.objectContaining({ profileId: 'profile_1', targetRole: 'AI Frontend Engineer' }),
     );
     expect(result).toMatchObject({ id: 'job_1', analysis: null, analysisStatus: 'processing' });
+    expect(provider.generateJson).toHaveBeenCalledWith(
+      expect.objectContaining({ taskType: 'job-analysis', thinking: 'disabled' }),
+    );
     await vi.waitFor(() =>
       expect(repository.updateJobAnalysis).toHaveBeenCalledWith('job_1', jobAnalysis),
     );
@@ -228,6 +232,98 @@ describe('InterviewService', () => {
     expect(provider.generateJson).not.toHaveBeenCalled();
     expect(repository.createProcessingJob).not.toHaveBeenCalled();
   });
+
+  it('retries a failed analysis on the same job and clears the previous error', async () => {
+    const repository = createRepositoryMock();
+    const failedJob = {
+      ...(await repository.getJob()),
+      analysis: null,
+      analysisStatus: 'failed',
+      analysisError: 'DeepSeek generation timed out',
+    };
+    repository.findJobByInput.mockResolvedValue(failedJob as never);
+    repository.getJob.mockResolvedValue({
+      ...failedJob,
+      analysisStatus: 'processing',
+      analysisError: null,
+    });
+    const provider = {
+      generateJson: vi.fn(async () => ({
+        data: jobAnalysis,
+        model: 'deepseek-v4-flash',
+        degraded: false,
+        usage: { inputTokens: 10, outputTokens: 20, cachedInputTokens: 0 },
+      })),
+    };
+    const service = new InterviewService(repository as never, provider as never);
+
+    const result = await service.analyzeJob({
+      profileId: failedJob.profileId,
+      targetRole: failedJob.targetRole,
+      company: failedJob.company,
+      jobDescription: failedJob.description,
+    });
+
+    expect(result).toMatchObject({
+      id: 'job_1',
+      analysisStatus: 'processing',
+      analysisError: null,
+    });
+    expect(repository.retryFailedJob).toHaveBeenCalledWith('job_1');
+    expect(repository.createProcessingJob).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(repository.updateJobAnalysis).toHaveBeenCalledWith('job_1', jobAnalysis),
+    );
+  });
+
+  it('does not start another generation when a concurrent request already claimed the retry', async () => {
+    const repository = createRepositoryMock();
+    const job = await repository.getJob();
+    repository.findJobByInput.mockResolvedValue({
+      ...job,
+      analysis: null,
+      analysisStatus: 'failed',
+      analysisError: 'provider timeout',
+    } as never);
+    repository.retryFailedJob.mockResolvedValue(false);
+    repository.getJob.mockResolvedValue({ ...job, analysis: null, analysisStatus: 'processing' });
+    const provider = { generateJson: vi.fn() };
+    const service = new InterviewService(repository as never, provider as never);
+
+    await expect(
+      service.analyzeJob({
+        profileId: job.profileId,
+        targetRole: job.targetRole,
+        company: job.company,
+        jobDescription: job.description,
+      }),
+    ).resolves.toMatchObject({ id: 'job_1', analysisStatus: 'processing' });
+    expect(repository.retryFailedJob).toHaveBeenCalledWith('job_1');
+    expect(provider.generateJson).not.toHaveBeenCalled();
+    expect(repository.createProcessingJob).not.toHaveBeenCalled();
+  });
+
+  it.each(['pending', 'processing'])(
+    'reuses a %s job without restarting generation',
+    async (status) => {
+      const repository = createRepositoryMock();
+      const job = await repository.getJob();
+      repository.findJobByInput.mockResolvedValue({ ...job, analysisStatus: status } as never);
+      const provider = { generateJson: vi.fn() };
+      const service = new InterviewService(repository as never, provider as never);
+
+      await expect(
+        service.analyzeJob({
+          profileId: job.profileId,
+          targetRole: job.targetRole,
+          company: job.company,
+          jobDescription: job.description,
+        }),
+      ).resolves.toMatchObject({ id: 'job_1', analysisStatus: status });
+      expect(repository.retryFailedJob).not.toHaveBeenCalled();
+      expect(provider.generateJson).not.toHaveBeenCalled();
+    },
+  );
 
   it('returns a job status snapshot for polling', async () => {
     const repository = createRepositoryMock();

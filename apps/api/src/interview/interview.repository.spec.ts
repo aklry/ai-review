@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
   CoachingCue,
   EvaluationReport,
@@ -6,6 +6,7 @@ import type {
   ProfileInput,
 } from '@interview-assistant/contracts';
 import { InterviewRepository } from './interview.repository.js';
+import { Prisma } from '../generated/prisma/client.js';
 
 describe('InterviewRepository', () => {
   it('persists a profile through Prisma', async () => {
@@ -36,7 +37,7 @@ describe('InterviewRepository', () => {
     ).resolves.toEqual(profile);
   });
 
-  it('creates a plan, session, and ordered questions', async () => {
+  it('creates a plan, session, and ordered questions with session-scoped ids', async () => {
     const calls: string[] = [];
     const prisma = {
       interviewPlan: {
@@ -48,7 +49,7 @@ describe('InterviewRepository', () => {
             language: 'zh-CN',
             round: 'technical',
             difficulty: 'l2',
-            questionCount: 1,
+            questionCount: 2,
           });
           return { id: 'plan_1' };
         },
@@ -67,11 +68,20 @@ describe('InterviewRepository', () => {
             {
               sessionId: 'session_1',
               order: 0,
-              id: 'q_1',
+              id: 'session_1:0:q_1',
               competency: 'project-depth',
               difficulty: 'l2',
               prompt: 'Tell me about a project.',
               isCore: true,
+            },
+            {
+              sessionId: 'session_1',
+              order: 1,
+              id: 'session_1:1:q_1',
+              competency: 'project-depth',
+              difficulty: 'l2',
+              prompt: 'Tell me about another project.',
+              isCore: false,
             },
           ]);
           return { count: 1 };
@@ -85,10 +95,10 @@ describe('InterviewRepository', () => {
       language: 'zh-CN',
       round: 'technical',
       difficulty: 'l2',
-      questionCount: 1,
+      questionCount: 2,
     } satisfies InterviewSessionCreateInput;
 
-    await repository.createSession(input, [
+    const result = await repository.createSession(input, [
       {
         id: 'q_1',
         competency: 'project-depth',
@@ -96,9 +106,17 @@ describe('InterviewRepository', () => {
         prompt: 'Tell me about a project.',
         isCore: true,
       },
+      {
+        id: 'q_1',
+        competency: 'project-depth',
+        difficulty: 'l2',
+        prompt: 'Tell me about another project.',
+        isCore: false,
+      },
     ]);
 
     expect(calls).toEqual(['plan', 'session', 'questions']);
+    expect(result.questions.map((item) => item.id)).toEqual(['session_1:0:q_1', 'session_1:1:q_1']);
   });
 
   it('creates a processing job for analysis', async () => {
@@ -110,7 +128,7 @@ describe('InterviewRepository', () => {
             targetRole: 'AI Frontend Engineer',
             company: 'Example AI',
             description: '需要前端和 AI 应用经验，能负责系统设计。',
-            analysis: null,
+            analysis: Prisma.DbNull,
             analysisStatus: 'processing',
             analysisError: null,
           });
@@ -143,6 +161,20 @@ describe('InterviewRepository', () => {
       analysisError: null,
     });
   });
+
+  it.each([0, 1])(
+    'claims a failed job for retry only when the conditional update affects %i rows',
+    async (count) => {
+      const updateMany = vi.fn(async () => ({ count }));
+      const repository = new InterviewRepository({ job: { updateMany } } as never);
+
+      await expect(repository.retryFailedJob('job_1')).resolves.toBe(count === 1);
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: 'job_1', analysisStatus: 'failed' },
+        data: { analysis: Prisma.DbNull, analysisStatus: 'processing', analysisError: null },
+      });
+    },
+  );
 
   it('updates job analysis status', async () => {
     const prisma = {

@@ -1,6 +1,6 @@
-import { GatewayTimeoutException } from '@nestjs/common';
+import { GatewayTimeoutException, ServiceUnavailableException } from '@nestjs/common';
 import { z } from 'zod';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_DEEPSEEK_TIMEOUT_MS,
   DeepSeekProvider,
@@ -124,6 +124,99 @@ describe('DeepSeekProvider', () => {
     expect(requests[0]?.body).toContain('"response_format":{"type":"json_object"}');
   });
 
+  it('passes the requested thinking mode to the model', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const provider = new DeepSeekProvider({
+      apiKey: 'server-only-key',
+      transport: async (_url, init) => {
+        bodies.push(JSON.parse(init.body) as Record<string, unknown>);
+        return response({ choices: [{ message: { content: '{"answer":"ready"}' } }] });
+      },
+    });
+    await provider.generateJson({
+      taskType: 'job-analysis',
+      schema: outputSchema,
+      systemPrompt: 'Return JSON.',
+      userPrompt: 'Hello',
+      thinking: 'disabled',
+    });
+
+    expect(bodies[0]?.thinking).toEqual({ type: 'disabled' });
+  });
+
+  it('reserves time for fallback after a stalled primary request is aborted', async () => {
+    vi.useFakeTimers();
+    try {
+      const models: string[] = [];
+      const provider = new DeepSeekProvider({
+        apiKey: 'server-only-key',
+        timeoutMs: 120_000,
+        primaryModel: 'deepseek-v4-pro',
+        fallbackModel: 'deepseek-v4-flash',
+        transport: async (_url, init) => {
+          const { model } = JSON.parse(init.body) as { model: string };
+          models.push(model);
+          if (model === 'deepseek-v4-pro') {
+            await new Promise((_, reject) => {
+              init.signal?.addEventListener('abort', () => reject(new Error('request aborted')), {
+                once: true,
+              });
+            });
+          }
+          return response({ choices: [{ message: { content: '{"answer":"fallback"}' } }] });
+        },
+      });
+      const result = provider.generateJson({
+        taskType: 'test',
+        schema: outputSchema,
+        systemPrompt: 'Return JSON.',
+        userPrompt: 'Hello',
+      });
+      await vi.advanceTimersByTimeAsync(80_000);
+
+      expect(models).toEqual(['deepseek-v4-pro', 'deepseek-v4-flash']);
+      await expect(result).resolves.toMatchObject({ data: { answer: 'fallback' }, degraded: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the full timeout budget when primary and fallback models are identical', async () => {
+    vi.useFakeTimers();
+    try {
+      const provider = new DeepSeekProvider({
+        apiKey: 'server-only-key',
+        timeoutMs: 120_000,
+        primaryModel: 'deepseek-v4-flash',
+        fallbackModel: 'deepseek-v4-flash',
+        transport: async (_url, init) => {
+          await new Promise((resolve, reject) => {
+            const timer = setTimeout(resolve, 100_000);
+            init.signal?.addEventListener(
+              'abort',
+              () => {
+                clearTimeout(timer);
+                reject(new Error('request aborted'));
+              },
+              { once: true },
+            );
+          });
+          return response({ choices: [{ message: { content: '{"answer":"ready"}' } }] });
+        },
+      });
+      const result = provider.generateJson({
+        taskType: 'test',
+        schema: outputSchema,
+        systemPrompt: 'Return JSON.',
+        userPrompt: 'Hello',
+      });
+      await vi.advanceTimersByTimeAsync(100_000);
+      await expect(result).resolves.toMatchObject({ data: { answer: 'ready' }, degraded: false });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('falls back to the flash model when primary generation fails', async () => {
     const models: string[] = [];
     const provider = new DeepSeekProvider({
@@ -151,6 +244,26 @@ describe('DeepSeekProvider', () => {
     expect(result.model).toBe('deepseek-v4-flash');
     expect(result.degraded).toBe(true);
     expect(models).toEqual(['deepseek-v4-pro', 'deepseek-v4-flash']);
+  });
+
+  it('returns a retryable service-unavailable error when DeepSeek cannot be reached', async () => {
+    const provider = new DeepSeekProvider({
+      apiKey: 'server-only-key',
+      primaryModel: 'deepseek-v4-flash',
+      fallbackModel: 'deepseek-v4-flash',
+      transport: async () => {
+        throw new TypeError('fetch failed');
+      },
+    });
+
+    await expect(
+      provider.generateJson({
+        taskType: 'test',
+        schema: outputSchema,
+        systemPrompt: 'Return JSON.',
+        userPrompt: 'Hello',
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('falls back when the primary response does not match the schema', async () => {

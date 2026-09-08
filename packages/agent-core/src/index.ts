@@ -52,15 +52,183 @@ export function normalizeCompetencyScores(cues: CoachingCue[]): CompetencyScores
 
 export function parseModelJson<T extends z.ZodTypeAny>(schema: T, content: string): z.infer<T> {
   try {
-    const withoutFence = content
+    const normalized = content
       .trim()
       .replace(/^```(?:json)?\s*/i, '')
       .replace(/\s*```$/, '');
-    return schema.parse(JSON.parse(withoutFence));
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(normalized);
+    } catch {
+      // Some providers add a short explanation before/after the JSON object.
+      // Parse the first complete object so harmless wrapper text does not
+      // turn an otherwise valid structured response into a failure.
+      const start = normalized.indexOf('{');
+      const end = normalized.lastIndexOf('}');
+      if (start < 0 || end <= start) throw new Error('response did not contain a JSON object');
+      parsed = JSON.parse(normalized.slice(start, end + 1));
+    }
+    try {
+      return schema.parse(parsed);
+    } catch (firstError) {
+      const repaired = repairQuestionSet(parsed);
+      const repairedCue = repairCoachingCue(repaired);
+      if (repairedCue !== parsed) return schema.parse(repairedCue);
+      const repairedReport = repairEvaluationReport(repaired);
+      if (repairedReport !== parsed) return schema.parse(repairedReport);
+      throw firstError;
+    }
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'unknown schema error';
     throw new Error(`Invalid model output: ${detail}`);
   }
+}
+
+function repairEvaluationReport(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const root = value as Record<string, unknown>;
+  const hasReportShape =
+    Object.keys(root).length === 0 ||
+    'report' in root ||
+    ['summary', 'overallScore', 'competencyScores', 'cues', 'strengths', 'gaps', 'nextPlan'].some(
+      (key) => key in root,
+    );
+  if (!hasReportShape) return value;
+  const source = (root.report ?? root.result ?? root) as Record<string, unknown>;
+  const scores: Record<string, unknown> =
+    source.competencyScores && typeof source.competencyScores === 'object'
+      ? (source.competencyScores as Record<string, unknown>)
+      : {};
+  const plan = Array.isArray(source.nextPlan) ? source.nextPlan : [];
+  const defaultPlan = Array.from({ length: 7 }, (_, index) => ({
+    day: index + 1,
+    focus: 'project-depth',
+    task: '补充一个 STAR 项目故事。',
+    reason: '完善回答证据。',
+  }));
+  return {
+    ...source,
+    summary:
+      typeof source.summary === 'string' && source.summary.trim()
+        ? source.summary
+        : '本次面试已完成。',
+    overallScore: typeof source.overallScore === 'number' ? source.overallScore : 0,
+    competencyScores: {
+      'vue-react': Number(scores['vue-react']) || 3,
+      'ai-application': Number(scores['ai-application']) || 3,
+      'system-design': Number(scores['system-design']) || 3,
+      'project-depth': Number(scores['project-depth']) || 3,
+    },
+    cues: Array.isArray(source.cues) ? source.cues : [],
+    strengths: Array.isArray(source.strengths) ? source.strengths : [],
+    gaps: Array.isArray(source.gaps) ? source.gaps : [],
+    nextPlan: plan.length === 7 ? plan : defaultPlan,
+  };
+}
+
+function repairCoachingCue(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const root = value as Record<string, unknown>;
+  const hasCueShape =
+    Object.keys(root).length === 0 ||
+    'feedback' in root ||
+    'coaching' in root ||
+    'result' in root ||
+    [
+      'competency',
+      'dimension',
+      'area',
+      'strengths',
+      'gaps',
+      'nextAction',
+      'evidence',
+      'recommendation',
+    ].some((key) => key in root);
+  if (!hasCueShape) return value;
+  const source = (root.feedback ?? root.coaching ?? root.result ?? root) as unknown;
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return value;
+  const cue = source as Record<string, unknown>;
+  const competency = String(cue.competency ?? cue.dimension ?? cue.area ?? '').toLowerCase();
+  const aliases: Record<string, string> = {
+    vue: 'vue-react',
+    react: 'vue-react',
+    frontend: 'vue-react',
+    ai: 'ai-application',
+    rag: 'ai-application',
+    system: 'system-design',
+    architecture: 'system-design',
+    project: 'project-depth',
+    behavioral: 'project-depth',
+  };
+  const rawScore = Number(cue.score ?? cue.rating ?? cue.level);
+  const score = Number.isFinite(rawScore) ? Math.max(1, Math.min(5, Math.round(rawScore))) : 3;
+  const strengths = Array.isArray(cue.strengths) ? cue.strengths : [];
+  const gaps = Array.isArray(cue.gaps)
+    ? cue.gaps
+    : Array.isArray(cue.weaknesses)
+      ? cue.weaknesses
+      : [];
+  const nextAction =
+    cue.nextAction ?? cue.recommendation ?? cue.action ?? '补充具体事实、过程和结果。';
+  const evidence =
+    Array.isArray(cue.evidence) && cue.evidence.length > 0
+      ? cue.evidence
+      : [{ source: 'history', quote: '本次回答未提供可引用证据。' }];
+  return {
+    ...cue,
+    competency: aliases[competency] ?? (competency || 'project-depth'),
+    score,
+    strengths,
+    gaps,
+    nextAction,
+    evidence,
+  };
+}
+
+function repairQuestionSet(value: unknown): unknown {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !Array.isArray((value as { questions?: unknown }).questions)
+  ) {
+    return value;
+  }
+  const questions = (value as { questions: unknown[] }).questions;
+  return {
+    ...(value as Record<string, unknown>),
+    questions: questions.map((item, index) => {
+      if (!item || typeof item !== 'object') return item;
+      const question = item as Record<string, unknown>;
+      const competencyAliases: Record<string, string> = {
+        vue: 'vue-react',
+        react: 'vue-react',
+        frontend: 'vue-react',
+        ai: 'ai-application',
+        rag: 'ai-application',
+        system: 'system-design',
+        architecture: 'system-design',
+        project: 'project-depth',
+        behavioral: 'project-depth',
+      };
+      const difficulty = String(question.difficulty ?? '').toLowerCase();
+      const competency = String(question.competency ?? '').toLowerCase();
+      return {
+        ...question,
+        id: question.id ?? `question_${index + 1}`,
+        prompt: question.prompt ?? question.question ?? question.text,
+        competency: competencyAliases[competency] ?? question.competency,
+        difficulty:
+          difficulty === 'easy'
+            ? 'l1'
+            : difficulty === 'medium'
+              ? 'l2'
+              : difficulty === 'hard'
+                ? 'l3'
+                : (question.difficulty ?? 'l2'),
+        isCore: typeof question.isCore === 'boolean' ? question.isCore : false,
+      };
+    }),
+  };
 }
 
 export function buildAnalysisPrompt(
@@ -76,7 +244,43 @@ export function buildAnalysisPrompt(
     `简历：${input.resumeText}`,
     `JD：${input.jobDescription}`,
     `候选人已确认的 STAR 故事：${JSON.stringify(input.stories)}`,
-    '请生成 summary、competencies、likelyQuestions、missingEvidence。',
+    '请生成 summary、competencies、likelyQuestions、missingEvidence。competencies 必须包含以下四个 competency 各一项：vue-react、ai-application、system-design、project-depth；priority 只能是 high、medium、low；evidence 必须是包含 source 和 quote 的对象数组，source 只能是 resume、job_description、answer、history。',
+    '严格只输出一个 JSON 对象，不要 Markdown 代码围栏。格式示例：',
+    JSON.stringify({
+      summary: '岗位重视前端交付与 AI 应用能力。',
+      competencies: [
+        {
+          competency: 'vue-react',
+          priority: 'high',
+          summary: '需要 Vue 或 React 交付经验。',
+          focusAreas: ['组件设计'],
+          evidence: [{ source: 'job_description', quote: 'Build frontend applications.' }],
+        },
+        {
+          competency: 'ai-application',
+          priority: 'medium',
+          summary: '需要 AI 功能落地经验。',
+          focusAreas: ['评估与监控'],
+          evidence: [{ source: 'resume', quote: 'Built an AI application.' }],
+        },
+        {
+          competency: 'system-design',
+          priority: 'medium',
+          summary: '需要系统设计和技术取舍能力。',
+          focusAreas: ['可用性'],
+          evidence: [{ source: 'job_description', quote: 'Own system design.' }],
+        },
+        {
+          competency: 'project-depth',
+          priority: 'low',
+          summary: '需要可量化的项目结果。',
+          focusAreas: ['结果指标'],
+          evidence: [{ source: 'resume', quote: 'Reduced page load time.' }],
+        },
+      ],
+      likelyQuestions: ['请介绍一个相关项目。'],
+      missingEvidence: [],
+    }),
   ].join('\n');
 }
 
@@ -94,6 +298,7 @@ export function buildCoachingPrompt(input: {
     '只评估训练表现，不生成是否录用结论。',
     '不得编造简历事实；每条关键反馈必须引用简历、JD 或回答原文。',
     '请只输出一个 JSON 对象，结构必须符合 CoachingCue。',
+    '每个数组最多 2 项，每项不超过 80 个字；nextAction 不超过 120 个字；禁止输出额外解释，确保 JSON 完整闭合。',
     `会话：${input.sessionId}`,
     `语言：${input.language}`,
     `当前问题：${JSON.stringify(input.currentQuestion)}`,

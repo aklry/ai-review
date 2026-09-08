@@ -1,4 +1,9 @@
-import { GatewayTimeoutException, Injectable } from '@nestjs/common';
+import {
+  BadGatewayException,
+  GatewayTimeoutException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { parseModelJson } from '@interview-assistant/agent-core';
 import type { ZodType } from 'zod';
 
@@ -26,6 +31,7 @@ export type DeepSeekRequest<T> = {
   systemPrompt: string;
   userPrompt: string;
   maxOutputTokens?: number;
+  thinking?: 'enabled' | 'disabled';
 };
 
 export type ModelUsage = {
@@ -101,9 +107,15 @@ export class DeepSeekProvider {
       throw new Error('DEEPSEEK_API_KEY is required on the API server');
     }
 
-    const deadline = Date.now() + this.timeoutMs;
+    const startedAt = Date.now();
+    const deadline = startedAt + this.timeoutMs;
+    // Reserve one third of the total budget for a different fallback model.
+    const primaryDeadline =
+      this.fallbackModel === this.primaryModel
+        ? deadline
+        : startedAt + Math.max(1, Math.floor((this.timeoutMs * 2) / 3));
     try {
-      return await this.generateWithModel(request, this.primaryModel, false, deadline);
+      return await this.generateWithModel(request, this.primaryModel, false, primaryDeadline);
     } catch (primaryError) {
       if (this.fallbackModel === this.primaryModel) {
         throw primaryError;
@@ -143,13 +155,14 @@ export class DeepSeekProvider {
           response_format: { type: 'json_object' },
           max_tokens: request.maxOutputTokens ?? 4_000,
           temperature: 0.2,
+          ...(request.thinking ? { thinking: { type: request.thinking } } : {}),
         }),
         signal: controller.signal,
       });
       const rawBody = await response.text();
       const body = parseJsonPayload(rawBody);
       if (!response.ok) {
-        throw new Error(
+        throw new BadGatewayException(
           `DeepSeek request failed with status ${response.status}: ${getErrorMessage(body)}`,
         );
       }
@@ -169,11 +182,18 @@ export class DeepSeekProvider {
       if (error instanceof Error && isTimeoutError(error)) {
         throw new GatewayTimeoutException('DeepSeek generation timed out');
       }
-      if (error instanceof Error && error.message.startsWith('Invalid model output:')) {
+      if (error instanceof BadGatewayException) {
         throw error;
       }
+      if (error instanceof Error && error.message.startsWith('Invalid model output:')) {
+        const detail = error.message.replace(/^Invalid model output:\s*/i, '');
+        // Zod's message contains only schema paths and validation reasons; it
+        // does not include the resume, JD, prompt, or API key.
+        console.warn(`[deepseek] invalid structured output: ${detail}`);
+        throw new BadGatewayException(`DeepSeek returned invalid structured output: ${detail}`);
+      }
       const message = error instanceof Error ? error.message : 'Unknown DeepSeek error';
-      throw new Error(`DeepSeek generation failed: ${message}`);
+      throw new ServiceUnavailableException(`DeepSeek service unavailable: ${message}`);
     } finally {
       clearTimeout(timeout);
     }

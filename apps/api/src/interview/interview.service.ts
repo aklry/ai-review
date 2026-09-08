@@ -41,14 +41,20 @@ export class InterviewService {
 
   async analyzeJob(input: JobAnalyzeInput) {
     const validInput = jobAnalyzeInputSchema.parse(input);
-    const existingJob = await this.repository.findJobByInput(validInput);
-    if (existingJob) {
-      return existingJob;
+    let job = await this.repository.findJobByInput(validInput);
+    if (job) {
+      if (job.analysisStatus !== 'failed') return job;
+      if (!(await this.repository.retryFailedJob(job.id))) {
+        return this.repository.getJob(job.id);
+      }
+      job = { ...job, analysis: null, analysisStatus: 'processing', analysisError: null };
+    } else {
+      job = await this.repository.createProcessingJob(validInput);
     }
 
-    const job = await this.repository.createProcessingJob(validInput);
-    void this.runJobAnalysis(job.id, validInput).catch((error: unknown) => {
-      console.error(`[job-analysis] failed for ${job.id}: ${getErrorMessage(error)}`);
+    const jobId = job.id;
+    void this.runJobAnalysis(jobId, validInput).catch((error: unknown) => {
+      console.error(`[job-analysis] failed for ${jobId}: ${getErrorMessage(error)}`);
     });
 
     return job;
@@ -90,7 +96,10 @@ export class InterviewService {
       }),
     });
     await this.recordUsage('local-user', undefined, result);
-    const questions = ensureQuestionCount(result.data.questions, validInput.questionCount);
+    const questions = ensureQuestionCount(
+      result.data.questions as InterviewQuestion[],
+      validInput.questionCount,
+    );
     return this.repository.createSession(validInput, questions);
   }
 
@@ -109,6 +118,7 @@ export class InterviewService {
       taskType: 'coaching',
       schema: coachingCueSchema,
       systemPrompt: 'Return JSON only for coaching feedback.',
+      maxOutputTokens: 1_200,
       userPrompt: buildCoachingPrompt({
         sessionId,
         language: session.plan.language,
@@ -192,6 +202,7 @@ export class InterviewService {
       const profile = await this.repository.getProfile(input.profileId);
       const result = await this.provider.generateJson({
         taskType: 'job-analysis',
+        thinking: 'disabled',
         schema: jobAnalysisSchema,
         systemPrompt: 'Return JSON only for job analysis.',
         userPrompt: buildAnalysisPrompt({
@@ -257,7 +268,10 @@ function toCoachingCue(cue: Record<string, unknown>): CoachingCue {
   });
 }
 
-function ensureQuestionCount(questions: InterviewQuestion[], count: number): InterviewQuestion[] {
+function ensureQuestionCount(
+  questions: InterviewQuestion[],
+  count: number,
+): Array<InterviewQuestion & { id: string }> {
   if (questions.length < count) {
     throw new BadRequestException(
       `DeepSeek returned ${questions.length} questions; ${count} required`,

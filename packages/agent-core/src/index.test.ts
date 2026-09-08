@@ -1,4 +1,8 @@
-import { coachingCueSchema } from '@interview-assistant/contracts';
+import {
+  coachingCueSchema,
+  jobAnalysisSchema,
+  questionSetSchema,
+} from '@interview-assistant/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   buildAnalysisPrompt,
@@ -88,6 +92,44 @@ describe('parseModelJson', () => {
     expect(parsed.score).toBe(4);
     expect(() => parseModelJson(coachingCueSchema, '{"score": 9}')).toThrow(/model output/i);
   });
+
+  it('accepts JSON surrounded by provider commentary', () => {
+    expect(
+      parseModelJson(
+        coachingCueSchema,
+        'Here is the JSON:\n{"competency":"ai-application","score":4,"strengths":["evidence"],"gaps":["cost"],"nextAction":"add monitoring","evidence":[{"source":"answer","quote":"eval"}]}',
+      ),
+    ).toMatchObject({ score: 4 });
+  });
+
+  it('repairs common question field names and difficulty aliases', () => {
+    const parsed = parseModelJson(
+      questionSetSchema,
+      JSON.stringify({
+        questions: [{ question: '介绍一个项目', competency: 'frontend', difficulty: 'medium' }],
+      }),
+    );
+    expect(parsed.questions[0]).toMatchObject({
+      prompt: '介绍一个项目',
+      competency: 'vue-react',
+      difficulty: 'l2',
+      isCore: false,
+    });
+  });
+
+  it('defaults omitted question difficulty to l2', () => {
+    const parsed = parseModelJson(
+      questionSetSchema,
+      JSON.stringify({ questions: [{ prompt: '介绍一个项目', competency: 'frontend' }] }),
+    );
+    expect(parsed.questions[0]?.difficulty).toBe('l2');
+  });
+
+  it('repairs an incomplete coaching response', () => {
+    const parsed = parseModelJson(coachingCueSchema, JSON.stringify({ feedback: {} }));
+    expect(parsed).toMatchObject({ competency: 'project-depth', score: 3, gaps: [] });
+    expect(parsed.evidence).toHaveLength(1);
+  });
 });
 
 describe('prompt builders', () => {
@@ -126,5 +168,23 @@ describe('prompt builders', () => {
     expect(prompt).toContain('LCP 从 4.8s 降到 2.1s');
     expect(prompt).toContain('CoachingCue');
     expect(prompt).toContain('JSON');
+  });
+
+  it('includes a complete analysis JSON example that the consumer schema accepts', () => {
+    const prompt = buildAnalysisPrompt({
+      profileId: 'profile_1',
+      targetRole: 'Frontend Engineer',
+      resumeText: 'Built Vue and React dashboards.',
+      jobDescription: 'Build accessible frontend applications and AI features.',
+      stories: [],
+    });
+    const example = prompt.split('\n').find((line) => line.startsWith('{'));
+
+    expect(example).toBeDefined();
+    const parsed = jobAnalysisSchema.parse(JSON.parse(example!));
+    expect(parsed.competencies[0]?.evidence[0]).toMatchObject({ source: 'job_description' });
+    for (const competency of ['vue-react', 'ai-application', 'system-design', 'project-depth']) {
+      expect(prompt).toContain(competency);
+    }
   });
 });
