@@ -351,6 +351,7 @@ h2 {
 
 .form-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
@@ -358,6 +359,18 @@ h2 {
   color: #71808d;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.form-actions > .action-group {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  max-width: 100%;
+  margin-left: auto;
+}
+
+.action-group .el-select {
+  width: 132px;
+  flex-shrink: 0;
 }
 
 .analysis-panel {
@@ -628,6 +641,7 @@ h2 {
   .action-group {
     align-items: stretch;
     flex-direction: column;
+    width: 100%;
   }
   .action-group .el-button,
   .action-group .el-select {
