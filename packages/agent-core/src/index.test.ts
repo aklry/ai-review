@@ -66,12 +66,12 @@ describe('normalizeCompetencyScores', () => {
     ]);
 
     expect(scores).toEqual({
-      'vue-react': 3,
-      'ai-application': 3,
+      'vue-react': null,
+      'ai-application': null,
       'system-design': 4,
       'project-depth': 4,
     });
-    expect(calculateWeightedScore(scores)).toBe(74);
+    expect(calculateWeightedScore(scores)).toBeNull();
   });
 });
 
@@ -125,10 +125,8 @@ describe('parseModelJson', () => {
     expect(parsed.questions[0]?.difficulty).toBe('l2');
   });
 
-  it('repairs an incomplete coaching response', () => {
-    const parsed = parseModelJson(coachingCueSchema, JSON.stringify({ feedback: {} }));
-    expect(parsed).toMatchObject({ competency: 'project-depth', score: 3, gaps: [] });
-    expect(parsed.evidence).toHaveLength(1);
+  it('rejects incomplete coaching instead of manufacturing a score and quotation', () => {
+    expect(() => parseModelJson(coachingCueSchema, JSON.stringify({ feedback: {} }))).toThrow();
   });
 });
 

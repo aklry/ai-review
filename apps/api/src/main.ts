@@ -11,6 +11,7 @@ dotenv.config({ path: join(process.cwd(), '.env') });
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
   app.setGlobalPrefix('api');
   app.enableCors({
     origin: process.env.DESKTOP_ORIGIN ?? 'http://localhost:5173',

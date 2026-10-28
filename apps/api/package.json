@@ -15,6 +15,8 @@
     "prisma:reset": "prisma migrate reset"
   },
   "dependencies": {
+    "@langchain/deepseek": "^1.1.19",
+    "@langchain/langgraph-checkpoint-postgres": "^1.1.2",
     "@aws-sdk/client-s3": "^3.1124.0",
     "@interview-assistant/agent-core": "workspace:*",
     "@interview-assistant/contracts": "workspace:*",

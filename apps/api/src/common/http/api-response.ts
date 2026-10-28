@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 import type { ApiResponse } from '@interview-assistant/contracts';
+import { Prisma } from '../../generated/prisma/client.js';
 
 export type ApiErrorResponse = ApiResponse<null>;
 
@@ -27,6 +28,18 @@ export function normalizeException(
   requestId: string,
   timestamp = new Date().toISOString(),
 ): NormalizedException {
+  if (exception instanceof Prisma.PrismaClientKnownRequestError && exception.code === 'P2025') {
+    return {
+      httpStatus: HttpStatus.NOT_FOUND,
+      body: {
+        code: HttpStatus.NOT_FOUND,
+        message: 'Record not found',
+        data: null,
+        requestId,
+        timestamp,
+      },
+    };
+  }
   if (isMultipartSizeError(exception)) {
     return {
       httpStatus: HttpStatus.BAD_REQUEST,

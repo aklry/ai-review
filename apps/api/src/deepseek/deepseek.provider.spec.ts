@@ -12,6 +12,21 @@ const outputSchema = z.object({
 });
 
 function response(body: unknown, ok = true, status = 200) {
+  // The SDK consumes real ChatCompletion envelopes, including assistant role.
+  if (body && typeof body === 'object' && 'choices' in body && Array.isArray(body.choices)) {
+    body = {
+      id: 'fixture-completion',
+      object: 'chat.completion',
+      created: 0,
+      ...body,
+      choices: body.choices.map((choice: { message?: object }, index: number) => ({
+        index,
+        finish_reason: 'stop',
+        ...choice,
+        message: { role: 'assistant', ...choice.message },
+      })),
+    };
+  }
   return {
     ok,
     status,
@@ -20,6 +35,26 @@ function response(body: unknown, ok = true, status = 200) {
 }
 
 describe('DeepSeekProvider', () => {
+  it('disables SDK retries so one application attempt makes one HTTP request', async () => {
+    const transport = vi.fn(async () =>
+      response({ error: { message: 'unavailable' } }, false, 503),
+    );
+    const provider = new DeepSeekProvider({
+      apiKey: 'fixture-key',
+      primaryModel: 'same',
+      fallbackModel: 'same',
+      transport,
+    });
+    await expect(
+      provider.generateJson({
+        taskType: 'test',
+        schema: outputSchema,
+        systemPrompt: 'Return JSON.',
+        userPrompt: 'Hello',
+      }),
+    ).rejects.toThrow();
+    expect(transport).toHaveBeenCalledOnce();
+  });
   it('uses a 120 second default model budget for long analysis runs', () => {
     expect(DEFAULT_DEEPSEEK_TIMEOUT_MS).toBe(120_000);
   });
@@ -120,7 +155,7 @@ describe('DeepSeekProvider', () => {
       cachedInputTokens: 2,
     });
     expect(requests[0]?.url).toBe('https://api.deepseek.com/chat/completions');
-    expect(requests[0]?.headers.Authorization).toBe('Bearer server-only-key');
+    expect(new Headers(requests[0]?.headers).get('authorization')).toBe('Bearer server-only-key');
     expect(requests[0]?.body).toContain('"response_format":{"type":"json_object"}');
   });
 
@@ -299,47 +334,58 @@ describe('DeepSeekProvider', () => {
   });
 
   it('shares one total timeout budget between primary and fallback models', async () => {
-    const aborts: string[] = [];
-    const provider = new DeepSeekProvider({
-      apiKey: 'server-only-key',
-      timeoutMs: 60,
-      transport: async (_url, init) => {
-        const requestBody = JSON.parse(String(init.body)) as { model: string };
-        if (requestBody.model === 'deepseek-v4-pro') {
-          await new Promise((resolve) => setTimeout(resolve, 20));
-          return response({ error: 'timeout' }, false, 504);
-        }
+    vi.useFakeTimers();
+    try {
+      const aborts: string[] = [];
+      const provider = new DeepSeekProvider({
+        apiKey: 'server-only-key',
+        timeoutMs: 60,
+        primaryModel: 'deepseek-v4-pro',
+        fallbackModel: 'deepseek-v4-flash',
+        transport: async (_url, init) => {
+          const requestBody = JSON.parse(String(init.body)) as { model: string };
+          if (requestBody.model === 'deepseek-v4-pro') {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            return response({ error: 'timeout' }, false, 504);
+          }
 
-        await new Promise<void>((resolve, reject) => {
-          init.signal?.addEventListener(
-            'abort',
-            () => {
-              aborts.push(requestBody.model);
-              reject(new Error('request aborted'));
+          await new Promise<void>((resolve, reject) => {
+            init.signal?.addEventListener(
+              'abort',
+              () => {
+                aborts.push(requestBody.model);
+                reject(new Error('request aborted'));
+              },
+              { once: true },
+            );
+          });
+          return response(
+            {
+              choices: [{ message: { content: '{"answer":"fallback"}' } }],
+              model: 'deepseek-v4-flash',
             },
-            { once: true },
+            true,
+            200,
           );
-        });
-        return response(
-          {
-            choices: [{ message: { content: '{"answer":"fallback"}' } }],
-            model: 'deepseek-v4-flash',
-          },
-          true,
-          200,
-        );
-      },
-    });
+        },
+      });
 
-    await expect(
-      provider.generateJson({
-        taskType: 'test',
-        schema: outputSchema,
-        systemPrompt: 'Return JSON.',
-        userPrompt: 'Hello',
-      }),
-    ).rejects.toBeInstanceOf(GatewayTimeoutException);
-    expect(aborts).toEqual(['deepseek-v4-flash']);
+      const rejected = expect(
+        provider.generateJson({
+          taskType: 'test',
+          schema: outputSchema,
+          systemPrompt: 'Return JSON.',
+          userPrompt: 'Hello',
+        }),
+      ).rejects.toBeInstanceOf(GatewayTimeoutException);
+      await vi.advanceTimersByTimeAsync(59);
+      expect(aborts).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      await rejected;
+      expect(aborts).toEqual(['deepseek-v4-flash']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('throws a gateway timeout when the total budget is exhausted', async () => {

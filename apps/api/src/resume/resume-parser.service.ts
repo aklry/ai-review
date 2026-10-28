@@ -184,7 +184,7 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
     }
     return pages.join('\n');
   } finally {
-    await document.destroy();
+    await loadingTask.destroy();
   }
 }
 

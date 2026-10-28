@@ -1,8 +1,19 @@
 import { BadRequestException, GatewayTimeoutException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import { createSuccessResponse, normalizeException } from './api-response.js';
+import { Prisma } from '../../generated/prisma/client.js';
 
 describe('API response envelope', () => {
+  it('returns 404 for Prisma missing records so saved-session recovery can discard stale IDs', () => {
+    const error = new Prisma.PrismaClientKnownRequestError(
+      'Record missing: private query context',
+      { code: 'P2025', clientVersion: '7.10.0' },
+    );
+    const normalized = normalizeException(error, 'recovery-request');
+    expect(normalized.httpStatus).toBe(404);
+    expect(normalized.body.code).toBe(404);
+    expect(normalized.body.message).not.toContain('private query context');
+  });
   const timestamp = '2026-08-25T00:00:00.000Z';
   const requestId = 'req_123';
 

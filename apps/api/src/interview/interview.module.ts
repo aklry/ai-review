@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { InterviewController } from './interview.controller.js';
 import { InterviewRepository } from './interview.repository.js';
 import { InterviewService } from './interview.service.js';
+import { WorkflowRuntime } from '../agents/workflow-runtime.service.js';
 
 @Module({
   imports: [PrismaModule],
@@ -20,6 +21,7 @@ import { InterviewService } from './interview.service.js';
       inject: [PrismaService],
     },
     InterviewService,
+    WorkflowRuntime,
   ],
 })
 export class InterviewModule {}

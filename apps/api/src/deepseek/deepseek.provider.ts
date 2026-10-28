@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { parseModelJson } from '@interview-assistant/agent-core';
+import { ChatDeepSeek } from '@langchain/deepseek';
 import type { ZodType } from 'zod';
 
 export type DeepSeekTransportInit = {
@@ -139,51 +140,68 @@ export class DeepSeekProvider {
     const timeout = setTimeout(() => controller.abort(), remainingMs);
 
     try {
-      const response = await this.transport(`${this.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: request.systemPrompt },
-            { role: 'user', content: request.userPrompt },
-          ],
+      let payload: ChatCompletionPayload = {};
+      const client = new ChatDeepSeek({
+        apiKey: this.apiKey,
+        model,
+        maxTokens: request.maxOutputTokens ?? 4_000,
+        temperature: 0.2,
+        maxRetries: 0,
+        timeout: remainingMs,
+        modelKwargs: {
           response_format: { type: 'json_object' },
-          max_tokens: request.maxOutputTokens ?? 4_000,
-          temperature: 0.2,
           ...(request.thinking ? { thinking: { type: request.thinking } } : {}),
-        }),
-        signal: controller.signal,
+        },
+        configuration: {
+          baseURL: this.baseUrl,
+          fetch: async (url, init) => {
+            const response = await this.transport(String(url), {
+              method: 'POST',
+              headers: Object.fromEntries(new Headers(init?.headers).entries()),
+              body: String(init?.body ?? ''),
+              signal: init?.signal ?? controller.signal,
+            });
+            const rawBody = await response.text();
+            payload = parseJsonPayload(rawBody);
+            return new Response(rawBody, {
+              status: response.status,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          },
+        },
       });
-      const rawBody = await response.text();
-      const body = parseJsonPayload(rawBody);
-      if (!response.ok) {
-        throw new BadGatewayException(
-          `DeepSeek request failed with status ${response.status}: ${getErrorMessage(body)}`,
-        );
-      }
-
-      const content = getContent(body);
+      const message = await client.invoke(
+        [
+          ['system', request.systemPrompt],
+          ['human', request.userPrompt],
+        ],
+        { signal: controller.signal },
+      );
+      const content = typeof message.content === 'string' ? message.content : getContent(payload);
       return {
         data: parseModelJson(request.schema, content),
         usage: {
-          inputTokens: getNumber(body.usage?.prompt_tokens),
-          outputTokens: getNumber(body.usage?.completion_tokens),
-          cachedInputTokens: getNumber(body.usage?.prompt_cache_hit_tokens),
+          inputTokens: getNumber(payload.usage?.prompt_tokens),
+          outputTokens: getNumber(payload.usage?.completion_tokens),
+          cachedInputTokens: getNumber(payload.usage?.prompt_cache_hit_tokens),
         },
-        model: typeof body.model === 'string' ? body.model : model,
+        model: typeof payload.model === 'string' ? payload.model : model,
         degraded,
       };
     } catch (error) {
-      if (error instanceof Error && isTimeoutError(error)) {
+      if (controller.signal.aborted || (error instanceof Error && isTimeoutError(error))) {
         throw new GatewayTimeoutException('DeepSeek generation timed out');
       }
       if (error instanceof BadGatewayException) {
         throw error;
+      }
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'status' in error &&
+        typeof error.status === 'number'
+      ) {
+        throw new BadGatewayException(`DeepSeek request failed with status ${error.status}`);
       }
       if (error instanceof Error && error.message.startsWith('Invalid model output:')) {
         const detail = error.message.replace(/^Invalid model output:\s*/i, '');

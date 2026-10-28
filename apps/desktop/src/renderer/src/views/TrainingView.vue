@@ -1,17 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, onBeforeUnmount } from 'vue';
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
 import { storeToRefs } from 'pinia';
-import {
-  analyzeJob,
-  createInterviewSession,
-  createProfile,
-  createStory,
-  finishInterviewSession,
-  getJob,
-  submitAnswer,
-  uploadResume,
-} from '../api/interview.js';
-import { ApiClientError } from '../lib/http.js';
 import { useTrainingStore, type Phase } from '../stores/training.js';
 
 const resumeFileInput = ref<HTMLInputElement | null>(null);
@@ -22,8 +11,6 @@ const {
   loading,
   errorMessage,
   profileId,
-  jobId,
-  sessionId,
   profileName,
   resumeText,
   resumeFileName,
@@ -37,7 +24,6 @@ const {
   interviewLanguage,
   interviewRound,
   interviewDifficulty,
-  questionCount,
   stories,
   storyDraft,
   storyMetricsText,
@@ -47,15 +33,13 @@ const {
   latestCue,
   analysis,
   analysisStatus,
-  analysisError,
-  analysisJobId,
   report,
   modelState,
   session,
+  answersComplete,
+  canSubmitAnswer,
+  baseQuestionCount,
 } = storeToRefs(trainingStore);
-
-const analysisPollingIntervalMs = 2000;
-let analysisPollHandle: number | null = null;
 
 const canStartPreparation = computed(
   () =>
@@ -73,59 +57,13 @@ const phaseTitle = computed(() => {
 });
 
 const progress = computed(() => {
-  if (!session.value?.questions.length) return 0;
-  return Math.min(
-    100,
-    Math.round((currentQuestionIndex.value / session.value.questions.length) * 100),
-  );
+  if (!baseQuestionCount.value) return 0;
+  return Math.min(100, Math.round((currentQuestionIndex.value / baseQuestionCount.value) * 100));
 });
 
 const analysisIsLoading = computed(
   () => analysisStatus.value === 'pending' || analysisStatus.value === 'processing',
 );
-
-async function startPreparation(): Promise<void> {
-  stopAnalysisPolling();
-  errorMessage.value = '';
-  loading.value = true;
-  analysisError.value = null;
-  analysis.value = null;
-  try {
-    let activeProfileId = profileId.value;
-    if (!activeProfileId) {
-      const profile = await createProfile({
-        resumeText: resumeText.value,
-        ...(profileName.value.trim() ? { displayName: profileName.value } : {}),
-      });
-      activeProfileId = profile.id;
-      profileId.value = profile.id;
-    }
-    for (const story of stories.value) {
-      await createStory(activeProfileId, story);
-    }
-    const job = await analyzeJob({
-      profileId: activeProfileId,
-      targetRole: targetRole.value,
-      ...(company.value.trim() ? { company: company.value } : {}),
-      jobDescription: jobDescription.value,
-    });
-    jobId.value = job.id;
-    analysisJobId.value = job.id;
-    analysisStatus.value = job.analysisStatus;
-    analysisError.value = job.analysisError;
-    if (job.analysisStatus === 'completed' && job.analysis) {
-      analysis.value = job.analysis;
-      phase.value = 'analysis';
-      return;
-    }
-    phase.value = 'analysis';
-    startAnalysisPolling();
-  } catch (error) {
-    showError(error);
-  } finally {
-    loading.value = false;
-  }
-}
 
 function openResumePicker(): void {
   resumeFileInput.value?.click();
@@ -136,55 +74,7 @@ function handleResumeFileChange(event: Event): void {
   const file = input.files?.[0];
   input.value = '';
   if (file) {
-    void uploadResumeFile(file);
-  }
-}
-
-async function uploadResumeFile(file: File): Promise<void> {
-  profileId.value = '';
-  resumeText.value = '';
-  resumeFileName.value = '';
-  resumeDocument.value = null;
-  resumeUploadProgress.value = 0;
-  manualResumeMode.value = false;
-
-  const extension = file.name.toLowerCase().split('.').pop();
-  if (extension === 'doc') {
-    resumeUploadState.value = 'error';
-    errorMessage.value = '暂不支持旧版 DOC 文件，请另存为 DOCX 或 PDF 后重新上传';
-    return;
-  }
-  if (extension !== 'pdf' && extension !== 'docx') {
-    resumeUploadState.value = 'error';
-    errorMessage.value = '仅支持 PDF 或 DOCX 简历文件';
-    return;
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    resumeUploadState.value = 'error';
-    errorMessage.value = '简历文件不能超过 10 MB';
-    return;
-  }
-
-  errorMessage.value = '';
-  loading.value = true;
-  resumeUploadState.value = 'uploading';
-  resumeUploadProgress.value = 0;
-  try {
-    const profile = await uploadResume(file, profileName.value, (percentage) => {
-      resumeUploadProgress.value = percentage;
-    });
-    profileId.value = profile.id;
-    resumeText.value = profile.resumeText;
-    resumeFileName.value = file.name;
-    resumeDocument.value = profile.resumeDocument ?? null;
-    manualResumeMode.value = false;
-    resumeUploadState.value = 'ready';
-    resumeUploadProgress.value = 100;
-  } catch (error) {
-    resumeUploadState.value = 'error';
-    showError(error);
-  } finally {
-    loading.value = false;
+    void trainingStore.uploadResumeFile(file);
   }
 }
 
@@ -216,121 +106,12 @@ function clearResumeUpload(): void {
   resumeUploadState.value = 'idle';
 }
 
-async function startInterview(): Promise<void> {
-  if (!profileId.value || !jobId.value) return;
-  errorMessage.value = '';
-  loading.value = true;
-  try {
-    const created = await createInterviewSession({
-      profileId: profileId.value,
-      jobId: jobId.value,
-      language: interviewLanguage.value,
-      round: interviewRound.value,
-      difficulty: interviewDifficulty.value,
-      questionCount: questionCount.value,
-    });
-    session.value = created;
-    sessionId.value = created.id;
-    currentQuestionIndex.value = 0;
-    currentQuestion.value = created.questions[0] ?? null;
-    latestCue.value = null;
-    answerText.value = '';
-    modelState.value = null;
-    phase.value = 'interview';
-  } catch (error) {
-    showError(error);
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function sendAnswer(): Promise<void> {
-  if (!sessionId.value || !currentQuestion.value || !answerText.value.trim()) return;
-  errorMessage.value = '';
-  loading.value = true;
-  try {
-    const result = await submitAnswer(sessionId.value, {
-      questionId: currentQuestion.value.id,
-      answerText: answerText.value,
-    });
-    latestCue.value = result.cue;
-    modelState.value = { model: result.model, degraded: result.degraded };
-    answerText.value = '';
-    if (result.nextQuestion) {
-      currentQuestionIndex.value += 1;
-      currentQuestion.value = result.nextQuestion;
-    }
-  } catch (error) {
-    showError(error);
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function finishInterview(): Promise<void> {
-  if (!sessionId.value) return;
-  errorMessage.value = '';
-  loading.value = true;
-  try {
-    report.value = await finishInterviewSession(sessionId.value);
-    phase.value = 'report';
-  } catch (error) {
-    showError(error);
-  } finally {
-    loading.value = false;
-  }
-}
-
-function restart(): void {
-  stopAnalysisPolling();
-  trainingStore.restart();
-}
-
-function startAnalysisPolling(): void {
-  stopAnalysisPolling();
-  void pollAnalysisOnce();
-  analysisPollHandle = window.setInterval(() => {
-    void pollAnalysisOnce();
-  }, analysisPollingIntervalMs);
-}
-
-function stopAnalysisPolling(): void {
-  if (analysisPollHandle !== null) {
-    window.clearInterval(analysisPollHandle);
-    analysisPollHandle = null;
-  }
-}
-
-async function pollAnalysisOnce(): Promise<void> {
-  if (
-    !analysisJobId.value ||
-    analysisStatus.value === 'completed' ||
-    analysisStatus.value === 'failed'
-  ) {
-    stopAnalysisPolling();
-    return;
-  }
-
-  try {
-    const job = await getJob(analysisJobId.value);
-    analysisStatus.value = job.analysisStatus;
-    analysisError.value = job.analysisError;
-    if (job.analysisStatus === 'completed' && job.analysis) {
-      analysis.value = job.analysis;
-      stopAnalysisPolling();
-    }
-    if (job.analysisStatus === 'failed') {
-      stopAnalysisPolling();
-      errorMessage.value = job.analysisError ?? '岗位分析失败';
-    }
-  } catch (error) {
-    showError(error);
-    stopAnalysisPolling();
-  }
-}
+onMounted(() => {
+  void trainingStore.activate();
+});
 
 onBeforeUnmount(() => {
-  stopAnalysisPolling();
+  trainingStore.deactivate();
 });
 
 function addStoryDraft(): void {
@@ -368,13 +149,6 @@ function addStoryDraft(): void {
   };
   storyMetricsText.value = '';
 }
-
-function showError(error: unknown): void {
-  errorMessage.value =
-    error instanceof ApiClientError
-      ? error.message
-      : '请求失败，请检查 API、PostgreSQL 和 DeepSeek 配置';
-}
 </script>
 
 <template>
@@ -390,13 +164,19 @@ function showError(error: unknown): void {
             phase === 'setup'
               ? '未开始'
               : phase === 'analysis'
-                ? '已完成分析'
+                ? analysisIsLoading
+                  ? '分析中'
+                  : analysisStatus === 'failed'
+                    ? '分析失败'
+                    : '已完成分析'
                 : phase === 'interview'
-                  ? '进行中'
+                  ? answersComplete
+                    ? '回答已完成'
+                    : '进行中'
                   : '已完成'
           }}
         </el-tag>
-        <el-button v-if="phase !== 'setup'" text @click="restart">重新开始</el-button>
+        <el-button v-if="phase !== 'setup'" text @click="trainingStore.restart">重新开始</el-button>
       </div>
     </header>
 
@@ -542,7 +322,7 @@ function showError(error: unknown): void {
           type="primary"
           :loading="loading"
           :disabled="!canStartPreparation || jobDescription.trim().length < 20"
-          @click="startPreparation"
+          @click="trainingStore.startPreparation"
         >
           分析岗位并继续
         </el-button>
@@ -619,7 +399,7 @@ function showError(error: unknown): void {
                 type="primary"
                 :loading="loading"
                 :disabled="!analysis"
-                @click="startInterview"
+                @click="trainingStore.startInterview"
               >
                 开始文字模拟
               </el-button>
@@ -629,7 +409,9 @@ function showError(error: unknown): void {
 
         <template v-else>
           <el-empty description="岗位分析失败" :image-size="96">
-            <el-button type="primary" @click="startPreparation">重新分析岗位</el-button>
+            <el-button type="primary" @click="trainingStore.startPreparation"
+              >重新分析岗位</el-button
+            >
           </el-empty>
         </template>
       </section>
@@ -639,11 +421,16 @@ function showError(error: unknown): void {
       <section class="interview-layout">
         <div class="interview-main">
           <div class="progress-row">
-            <span>第 {{ currentQuestionIndex + 1 }} 题</span>
-            <span>{{ session?.questions.length ?? questionCount }} 题计划</span>
+            <span v-if="answersComplete">回答已完成</span>
+            <span v-else
+              >第 {{ currentQuestionIndex + 1 }} 题{{
+                currentQuestion?.parentQuestionId ? ' · 追问' : ''
+              }}</span
+            >
+            <span>{{ baseQuestionCount }} 题计划</span>
           </div>
           <el-progress :percentage="progress" :show-text="false" :stroke-width="7" />
-          <div class="question-panel">
+          <div v-if="currentQuestion" class="question-panel">
             <div class="question-meta">
               <el-tag size="small">{{ currentQuestion?.competency }}</el-tag>
               <el-tag size="small" effect="plain">{{ currentQuestion?.difficulty }}</el-tag>
@@ -651,20 +438,29 @@ function showError(error: unknown): void {
             </div>
             <h2>{{ currentQuestion?.prompt }}</h2>
           </div>
+          <div v-else class="question-panel" role="status">
+            <h2>所有题目已完成</h2>
+            <p>本轮回答已保存，可以结束并生成训练报告。</p>
+          </div>
           <el-input
             v-model="answerText"
             type="textarea"
             :rows="12"
             resize="none"
+            :disabled="loading || !currentQuestion || session?.status !== 'active'"
             placeholder="基于真实经历作答。可以使用 STAR 结构，并补充技术取舍与量化结果。"
           />
           <div class="form-actions">
             <span>这是受控训练模式，不生成真实面试中的实时作答内容。</span>
             <div class="action-group">
-              <el-button :loading="loading" :disabled="!answerText.trim()" @click="sendAnswer">
+              <el-button
+                :loading="loading"
+                :disabled="!canSubmitAnswer"
+                @click="trainingStore.sendAnswer"
+              >
                 提交回答
               </el-button>
-              <el-button type="primary" :loading="loading" @click="finishInterview">
+              <el-button type="primary" :loading="loading" @click="trainingStore.finishInterview">
                 结束并生成报告
               </el-button>
             </div>
@@ -715,8 +511,12 @@ function showError(error: unknown): void {
       <section v-if="report" class="report-layout">
         <div class="report-score-panel">
           <p class="section-label">SESSION SCORE</p>
-          <div class="overall-score">{{ Math.round(report.overallScore) }}<small>/100</small></div>
+          <div class="overall-score">
+            {{ report.overallScore === null ? '未测评' : Math.round(report.overallScore) }}
+            <small v-if="report.overallScore !== null">/100</small>
+          </div>
           <p>{{ report.summary }}</p>
+          <small>计分版本：{{ report.scoringVersion ?? 'legacy-v1' }}</small>
         </div>
         <div class="report-main">
           <div class="section-heading">
@@ -732,8 +532,13 @@ function showError(error: unknown): void {
               class="score-item"
             >
               <span>{{ competency }}</span>
-              <strong>{{ score }}/5</strong>
-              <el-progress :percentage="score * 20" :show-text="false" :stroke-width="6" />
+              <strong>{{ score === null ? '未测评' : `${score}/5` }}</strong>
+              <el-progress
+                v-if="score !== null"
+                :percentage="score * 20"
+                :show-text="false"
+                :stroke-width="6"
+              />
             </article>
           </div>
           <div class="report-columns">

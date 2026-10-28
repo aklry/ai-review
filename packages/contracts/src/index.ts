@@ -29,10 +29,10 @@ export const competencyScoreSchema = z.number().int().min(1).max(5);
 export type CompetencyScore = z.infer<typeof competencyScoreSchema>;
 
 export const competencyScoresSchema = z.object({
-  'vue-react': competencyScoreSchema,
-  'ai-application': competencyScoreSchema,
-  'system-design': competencyScoreSchema,
-  'project-depth': competencyScoreSchema,
+  'vue-react': competencyScoreSchema.nullable(),
+  'ai-application': competencyScoreSchema.nullable(),
+  'system-design': competencyScoreSchema.nullable(),
+  'project-depth': competencyScoreSchema.nullable(),
 });
 export type CompetencyScores = z.infer<typeof competencyScoresSchema>;
 
@@ -44,6 +44,23 @@ export const evidenceSchema = z.object({
   quote: z.string().trim().min(1),
 });
 export type Evidence = z.infer<typeof evidenceSchema>;
+
+export const structuredProfileSchema = z.object({
+  summary: z.string().trim().min(1),
+  skills: z.array(z.string().trim().min(1)),
+  projects: z.array(
+    z.object({
+      name: z.string().trim().min(1),
+      contribution: z.string().trim().min(1),
+      decisions: z.array(z.string().trim().min(1)),
+      results: z.array(z.string().trim().min(1)),
+      evidence: z.array(evidenceSchema).min(1),
+    }),
+  ),
+  evidence: z.array(evidenceSchema).min(1),
+  missingEvidence: z.array(z.string().trim().min(1)),
+});
+export type StructuredProfile = z.infer<typeof structuredProfileSchema>;
 
 export const storyInputSchema = z.object({
   title: z.string().trim().min(1),
@@ -132,11 +149,12 @@ export type JobRecord = z.infer<typeof jobRecordSchema>;
 export const questionSchema = z.object({
   // IDs are assigned by the API after generation; accepting an omitted ID
   // keeps model output compatible while preserving a required string type.
-  id: z.string().trim().min(1).default(''),
+  id: z.string().trim().min(1).default('question'),
   competency: competencySchema,
   difficulty: difficultySchema,
   prompt: z.string().trim().min(1),
   isCore: z.boolean(),
+  parentQuestionId: z.string().min(1).nullable().optional(),
 });
 export type InterviewQuestion = z.infer<typeof questionSchema>;
 
@@ -180,14 +198,33 @@ export const trainingDaySchema = z.object({
 });
 export type TrainingDay = z.infer<typeof trainingDaySchema>;
 
-export const evaluationReportSchema = z.object({
+export const trainingPlanSchema = z
+  .array(trainingDaySchema)
+  .length(7)
+  .refine(
+    (days) => new Set(days.map((day) => day.day)).size === 7,
+    'Training plan must cover each of days 1 through 7 exactly once',
+  );
+
+export const reportNarrativeSchema = z.object({
   summary: z.string().trim().min(1),
-  overallScore: z.number().min(0).max(100),
-  competencyScores: competencyScoresSchema,
-  cues: z.array(coachingCueSchema),
   strengths: z.array(z.string().trim().min(1)),
   gaps: z.array(z.string().trim().min(1)),
-  nextPlan: z.array(trainingDaySchema).length(7),
+  nextPlan: trainingPlanSchema,
+});
+export type ReportNarrative = z.infer<typeof reportNarrativeSchema>;
+
+export const evaluationReportSchema = z.object({
+  summary: z.string().trim().min(1),
+  overallScore: z.number().min(0).max(100).nullable(),
+  competencyScores: competencyScoresSchema,
+  cues: z.array(coachingCueSchema),
+  supplementalCues: z.array(coachingCueSchema).optional(),
+  strengths: z.array(z.string().trim().min(1)),
+  gaps: z.array(z.string().trim().min(1)),
+  nextPlan: trainingPlanSchema,
+  scoringVersion: z.enum(['legacy-v1', 'evidence-v2']).optional(),
+  assessmentStatus: z.enum(['complete', 'partial', 'unassessed']).optional(),
 });
 export type EvaluationReport = z.infer<typeof evaluationReportSchema>;
 

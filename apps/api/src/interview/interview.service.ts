@@ -1,299 +1,307 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  type OnModuleDestroy,
+  type OnApplicationBootstrap,
+} from '@nestjs/common';
 import {
   answerSubmitInputSchema,
-  coachingCueSchema,
-  evaluationReportSchema,
-  jobAnalysisSchema,
   jobAnalyzeInputSchema,
   profileInputSchema,
-  questionSetSchema,
   storyInputSchema,
+  structuredProfileSchema,
   type AnswerSubmitInput,
-  type CoachingCue,
-  type EvaluationReport,
-  type InterviewQuestion,
   type InterviewSessionCreateInput,
   type JobAnalyzeInput,
   type ProfileInput,
   type StoryInput,
 } from '@interview-assistant/contracts';
-import {
-  buildAnalysisPrompt,
-  buildCoachingPrompt,
-  buildQuestionPrompt,
-  buildReportPrompt,
-  calculateWeightedScore,
-  normalizeCompetencyScores,
-} from '@interview-assistant/agent-core';
-import { DeepSeekProvider } from '../deepseek/deepseek.provider.js';
-import { InterviewRepository } from './interview.repository.js';
+import { WorkflowRuntime } from '../agents/workflow-runtime.service.js';
+import { InterviewRepository, type InterviewSessionRecord } from './interview.repository.js';
+import { planNextTurn } from './session-state.js';
+import type { TurnResponse } from './session.repository.js';
+import { toCue } from './cue-record.js';
+
+const LEASE_MS = 300_000;
 
 @Injectable()
-export class InterviewService {
+export class InterviewService implements OnApplicationBootstrap, OnModuleDestroy {
+  private recoveryTimer: ReturnType<typeof setInterval> | undefined;
+  private recovering = false;
+  private stopped = false;
+  private readonly jobs = new Map<string, Promise<void>>();
   constructor(
     private readonly repository: InterviewRepository,
-    private readonly provider: DeepSeekProvider,
+    private readonly runtime: WorkflowRuntime,
   ) {}
 
+  onApplicationBootstrap() {
+    this.recoveryTimer = setInterval(() => {
+      void this.recover().catch(() =>
+        console.error('[job-analysis] recovery failed; check database connectivity'),
+      );
+    }, 5000);
+    this.recoveryTimer.unref();
+    void this.recover().catch(() =>
+      console.error('[job-analysis] initial recovery failed; check database connectivity'),
+    );
+  }
+  async onModuleDestroy() {
+    this.stopped = true;
+    if (this.recoveryTimer) clearInterval(this.recoveryTimer);
+    await Promise.allSettled(this.jobs.values());
+  }
   createProfile(input: ProfileInput) {
     return this.repository.createProfile(profileInputSchema.parse(input));
   }
-
-  async analyzeJob(input: JobAnalyzeInput) {
-    const validInput = jobAnalyzeInputSchema.parse(input);
-    let job = await this.repository.findJobByInput(validInput);
-    if (job) {
-      if (job.analysisStatus !== 'failed') return job;
-      if (!(await this.repository.retryFailedJob(job.id))) {
-        return this.repository.getJob(job.id);
-      }
-      job = { ...job, analysis: null, analysisStatus: 'processing', analysisError: null };
-    } else {
-      job = await this.repository.createProcessingJob(validInput);
-    }
-
-    const jobId = job.id;
-    void this.runJobAnalysis(jobId, validInput).catch((error: unknown) => {
-      console.error(`[job-analysis] failed for ${jobId}: ${getErrorMessage(error)}`);
-    });
-
-    return job;
-  }
-
-  getJob(jobId: string) {
-    return this.repository.getJob(jobId);
-  }
-
   createStory(profileId: string, input: StoryInput) {
     return this.repository.createStory(profileId, storyInputSchema.parse(input));
+  }
+  getJob(id: string) {
+    return this.repository.getJob(id);
+  }
+  getSession(id: string) {
+    return this.repository.getSession(id);
+  }
+  getReport(id: string) {
+    return this.repository.getReport(id);
+  }
+
+  async analyzeJob(input: JobAnalyzeInput) {
+    const valid = jobAnalyzeInputSchema.parse(input);
+    const profile = await this.repository.getProfile(valid.profileId);
+    const stories = profile.stories.map((story) => storyInputSchema.parse(story));
+    const inputHash = jobHash(valid, profile.resumeText, stories);
+    let job = await this.repository.findJobByHash(inputHash);
+    if (!job) job = await this.repository.createWorkflowJob(valid, inputHash);
+    if (job.analysisStatus === 'failed') {
+      if (!(await this.repository.retryFailedJob(job.id))) return this.repository.getJob(job.id);
+      job = { ...job, analysisStatus: 'processing', analysisError: null };
+    }
+    if (job.analysisStatus === 'processing') this.schedule(job.id);
+    return job;
   }
 
   async createSession(input: InterviewSessionCreateInput) {
     const profile = await this.repository.getProfile(input.profileId);
     const job = await this.repository.getJob(input.jobId);
-    if (job.analysisStatus !== 'completed' || !job.analysis) {
+    if (job.profileId !== profile.id)
+      throw new BadRequestException('Job does not belong to this profile');
+    if (job.analysisStatus !== 'completed' || !job.analysis)
       throw new BadRequestException('Job analysis is not ready yet');
-    }
-
-    const validInput = {
-      ...input,
-      questionCount: input.questionCount ?? 8,
-    };
-    const result = await this.provider.generateJson({
-      taskType: 'question-generation',
-      schema: questionSetSchema,
-      systemPrompt: 'Return JSON only for question generation.',
-      userPrompt: buildQuestionPrompt({
+    const questions = await this.runtime.workflows.questions(
+      {
         targetRole: job.targetRole,
         ...(job.company ? { company: job.company } : {}),
-        language: validInput.language,
-        round: validInput.round,
-        difficulty: validInput.difficulty,
-        questionCount: validInput.questionCount,
+        language: input.language,
+        round: input.round,
+        difficulty: input.difficulty,
+        questionCount: input.questionCount ?? 8,
         jobAnalysis: job.analysis,
         profileSummary: profile.resumeText,
-        stories: toStories(profile.stories),
-      }),
-    });
-    await this.recordUsage('local-user', undefined, result);
-    const questions = ensureQuestionCount(
-      result.data.questions as InterviewQuestion[],
-      validInput.questionCount,
+        stories: profile.stories.map((story) => storyInputSchema.parse(story)),
+      },
+      { operationId: randomUUID() },
     );
-    return this.repository.createSession(validInput, questions);
+    const created = await this.repository.createWorkflowSession(input, questions);
+    return this.repository.getSession(created.id);
   }
 
-  async submitAnswer(sessionId: string, input: AnswerSubmitInput) {
-    const validInput = answerSubmitInputSchema.parse(input);
+  async submitAnswer(sessionId: string, input: AnswerSubmitInput): Promise<TurnResponse> {
+    const valid = answerSubmitInputSchema.parse(input);
     const session = await this.repository.getSession(sessionId);
-    const currentQuestion = session.questions.find(
-      (question) => question.id === validInput.questionId,
-    );
-    if (!currentQuestion) {
-      throw new NotFoundException('Question not found in this session');
+    const question = session.questions.find((q) => q.id === valid.questionId);
+    if (!question) throw new NotFoundException('Question not found in this session');
+    const requestHash = hash(valid.answerText);
+    if (question.answer) {
+      if (question.answer.requestHash === requestHash && question.answer.result)
+        return question.answer.result as TurnResponse;
+      throw new ConflictException('This answer is already submitted; reload the session');
     }
-
-    const priorCues = session.cues.map(toCoachingCue);
-    const result = await this.provider.generateJson({
-      taskType: 'coaching',
-      schema: coachingCueSchema,
-      systemPrompt: 'Return JSON only for coaching feedback.',
-      maxOutputTokens: 1_200,
-      userPrompt: buildCoachingPrompt({
-        sessionId,
-        language: session.plan.language,
-        currentQuestion,
-        answerText: validInput.answerText,
-        profileSummary: session.plan.profile.resumeText,
-        jobSummary: session.plan.job.description,
-        priorCues,
-      }),
-    });
-    await this.recordUsage('local-user', sessionId, result);
-    await this.repository.saveAnswerFeedback({
-      sessionId,
-      questionId: validInput.questionId,
-      answerText: validInput.answerText,
-      cue: result.data,
-    });
-
-    const nextQuestion = result.data.followUpQuestion
-      ? {
-          id: `followup-${sessionId}-${session.currentQuestionIndex}`,
-          competency: result.data.competency,
-          difficulty: currentQuestion.difficulty,
-          prompt: result.data.followUpQuestion,
-          isCore: false,
-        }
-      : (session.questions[session.currentQuestionIndex + 1] ?? null);
-    if (nextQuestion?.id.startsWith('followup-')) {
-      await this.repository.createFollowUpQuestion(
-        sessionId,
-        nextQuestion,
-        1_000 + session.currentQuestionIndex,
+    if (session.status !== 'active' || session.activeQuestionId !== question.id)
+      throw new ConflictException('This is not the active question');
+    return this.withLease(session, async (token) => {
+      const result = await this.runtime.workflows.coach(
+        {
+          sessionId,
+          language: session.plan.language,
+          currentQuestion: question,
+          answerText: valid.answerText,
+          profileSummary: session.plan.profile.resumeText,
+          jobSummary: session.plan.job.description,
+          priorCues: session.cues.map(toCue),
+        },
+        { operationId: `${sessionId}:${question.id}:${requestHash}`, sessionId },
       );
-    }
-
-    return {
-      cue: result.data,
-      nextQuestion,
-      degraded: result.degraded,
-      model: result.model,
-    };
+      const cue = { ...result.cue };
+      delete cue.followUpQuestion;
+      if (result.followUp) cue.followUpQuestion = result.followUp.prompt;
+      const next = planNextTurn(session.questions, question, result.followUp);
+      const response: TurnResponse = {
+        cue,
+        nextQuestion: next.nextQuestion,
+        currentQuestionIndex: next.currentQuestionIndex,
+        status: next.status,
+        activeQuestionId: next.nextQuestion?.id ?? null,
+        model: result.model,
+        degraded: result.degraded,
+      };
+      return this.repository.commitTurn({
+        sessionId,
+        questionId: question.id,
+        answerText: valid.answerText,
+        requestHash,
+        cue,
+        response,
+        expectedVersion: session.version,
+        leaseToken: token,
+      });
+    });
   }
 
   async finishSession(sessionId: string) {
     const session = await this.repository.getSession(sessionId);
-    const cues = session.cues.map(toCoachingCue);
-    const result = await this.provider.generateJson({
-      taskType: 'report',
-      schema: evaluationReportSchema,
-      systemPrompt: 'Return JSON only for the evaluation report.',
-      userPrompt: buildReportPrompt({
-        sessionId,
-        language: session.plan.language,
-        profileSummary: session.plan.profile.resumeText,
-        jobSummary: session.plan.job.description,
-        cues,
-      }),
+    if (session.report || session.status === 'completed')
+      return this.repository.getReport(sessionId);
+    if (!['active', 'awaiting_finish'].includes(session.status))
+      throw new ConflictException('Interview cannot be finished in this state');
+    const cues = session.questions
+      .filter((q) => !q.parentQuestionId && q.answer?.cue)
+      .map((q) => toCue(q.answer!.cue!));
+    const supplementalCues = session.questions
+      .filter((q) => q.parentQuestionId && q.answer?.cue)
+      .map((q) => toCue(q.answer!.cue!));
+    if (cues.length === 0)
+      throw new BadRequestException('Answer at least one question before generating a report');
+    return this.withLease(session, async (token) => {
+      const report = await this.runtime.workflows.report(
+        {
+          sessionId,
+          language: session.plan.language,
+          profileSummary: session.plan.profile.resumeText,
+          jobSummary: session.plan.job.description,
+          cues,
+          supplementalCues,
+        },
+        { operationId: `${sessionId}:${session.version}:evidence-v2`, sessionId },
+      );
+      return this.repository.finishWorkflowSession(sessionId, report, session.version, token);
     });
-    await this.recordUsage('local-user', sessionId, result);
-
-    const competencyScores = normalizeCompetencyScores(cues);
-    const report: EvaluationReport = {
-      ...result.data,
-      cues,
-      competencyScores,
-      overallScore: calculateWeightedScore(competencyScores),
-    };
-    return this.repository.finishSession(sessionId, report);
   }
 
-  getSession(sessionId: string) {
-    return this.repository.getSession(sessionId);
-  }
-
-  getReport(sessionId: string) {
-    return this.repository.getReport(sessionId);
-  }
-
-  private async runJobAnalysis(jobId: string, input: JobAnalyzeInput): Promise<void> {
+  private async withLease<T>(
+    session: InterviewSessionRecord,
+    run: (token: string) => Promise<T>,
+  ): Promise<T> {
+    const token = randomUUID();
+    if (
+      !(await this.repository.claimSession(
+        session.id,
+        session.version,
+        token,
+        new Date(Date.now() + LEASE_MS),
+      ))
+    )
+      throw new ConflictException('An interview operation is already running; reload its state');
+    const heartbeat = setInterval(() => {
+      void this.repository
+        .renewSession(session.id, token, new Date(Date.now() + LEASE_MS))
+        .catch(() => undefined);
+    }, 30_000);
+    heartbeat.unref();
     try {
-      const profile = await this.repository.getProfile(input.profileId);
-      const result = await this.provider.generateJson({
-        taskType: 'job-analysis',
-        thinking: 'disabled',
-        schema: jobAnalysisSchema,
-        systemPrompt: 'Return JSON only for job analysis.',
-        userPrompt: buildAnalysisPrompt({
-          ...input,
-          resumeText: profile.resumeText,
-          stories: toStories(profile.stories),
-        }),
-        maxOutputTokens: 2_000,
-      });
-      await this.recordUsage('local-user', undefined, result);
-      await this.repository.updateJobAnalysis(jobId, result.data);
-    } catch (error) {
-      await this.repository.markJobAnalysisFailed(jobId, getErrorMessage(error));
-      throw error;
+      return await run(token);
+    } finally {
+      clearInterval(heartbeat);
+      await this.repository
+        .releaseSession(session.id, token)
+        .catch(() => console.error('[interview] lease cleanup failed; expiry will release it'));
     }
   }
 
-  private async recordUsage(
-    userKey: string,
-    sessionId: string | undefined,
-    result: {
-      model: string;
-      degraded: boolean;
-      usage: {
-        inputTokens: number;
-        outputTokens: number;
-        cachedInputTokens: number;
+  private schedule(id: string) {
+    if (this.stopped || this.jobs.has(id)) return;
+    const promise = this.runAnalysis(id)
+      .catch(() => console.error(`[job-analysis] job ${id} failed; status persisted`))
+      .finally(() => this.jobs.delete(id));
+    this.jobs.set(id, promise);
+  }
+  private async recover() {
+    if (this.stopped || this.recovering) return;
+    this.recovering = true;
+    try {
+      for (const job of await this.repository.recoverableJobs()) this.schedule(job.id);
+    } finally {
+      this.recovering = false;
+    }
+  }
+  private async runAnalysis(id: string) {
+    const owner = randomUUID();
+    if (!(await this.repository.claimJob(id, owner, new Date(Date.now() + LEASE_MS)))) return;
+    const heartbeat = setInterval(() => {
+      void this.repository
+        .renewJob(id, owner, new Date(Date.now() + LEASE_MS))
+        .catch(() => undefined);
+    }, 30_000);
+    heartbeat.unref();
+    try {
+      const job = await this.repository.getJob(id);
+      const profile = await this.repository.getProfile(job.profileId);
+      const stories = profile.stories.map((story) => storyInputSchema.parse(story));
+      const input: JobAnalyzeInput = {
+        profileId: profile.id,
+        targetRole: job.targetRole,
+        ...(job.company ? { company: job.company } : {}),
+        jobDescription: job.description,
       };
-    },
-  ): Promise<void> {
-    const price = getModelPrice(result.model);
-    await this.repository.recordUsage({
-      userKey,
-      model: result.model,
-      taskType: 'agent',
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
-      cachedInputTokens: result.usage.cachedInputTokens,
-      degraded: result.degraded,
-      estimatedCostCny:
-        ((result.usage.inputTokens - result.usage.cachedInputTokens) * price.input +
-          result.usage.cachedInputTokens * price.cachedInput +
-          result.usage.outputTokens * price.output) /
-        1_000_000,
-      ...(sessionId ? { sessionId } : {}),
-    });
+      if (job.inputHash && job.inputHash !== jobHash(input, profile.resumeText, stories))
+        throw new Error('Candidate facts changed during analysis; please analyze again');
+      const profileHash = hash(
+        JSON.stringify({ version: 'profile-v1', resumeText: profile.resumeText, stories }),
+      );
+      const parsed = structuredProfileSchema.safeParse(profile.structuredResume);
+      const cachedProfile =
+        profile.structuredResumeHash === profileHash && parsed.success ? parsed.data : undefined;
+      const result = await this.runtime.workflows.prepare(
+        {
+          ...input,
+          resumeText: profile.resumeText,
+          stories,
+          ...(cachedProfile ? { cachedProfile } : {}),
+        },
+        { operationId: `${id}:${job.inputHash ?? profileHash}:v1` },
+      );
+      await this.repository.saveStructuredProfile(profile.id, profileHash, result.profile);
+      await this.repository.completeJob(id, owner, result.analysis);
+    } catch (error) {
+      await this.repository.failJob(
+        id,
+        owner,
+        error instanceof Error ? error.message : 'Job analysis failed',
+      );
+      throw error;
+    } finally {
+      clearInterval(heartbeat);
+    }
   }
 }
 
-function toStories(stories: Array<Record<string, unknown>>): StoryInput[] {
-  return stories.map((story) => storyInputSchema.parse(story));
+function hash(value: string) {
+  return createHash('sha256').update(value).digest('hex');
 }
-
-function toCoachingCue(cue: Record<string, unknown>): CoachingCue {
-  return coachingCueSchema.parse({
-    competency: cue.competency,
-    score: cue.score,
-    strengths: cue.strengths,
-    gaps: cue.gaps,
-    nextAction: cue.nextAction,
-    evidence: cue.evidence,
-    ...(cue.followUpQuestion ? { followUpQuestion: cue.followUpQuestion } : {}),
-  });
-}
-
-function ensureQuestionCount(
-  questions: InterviewQuestion[],
-  count: number,
-): Array<InterviewQuestion & { id: string }> {
-  if (questions.length < count) {
-    throw new BadRequestException(
-      `DeepSeek returned ${questions.length} questions; ${count} required`,
-    );
-  }
-  return questions.slice(0, count).map((question, index) => ({
-    ...question,
-    id: question.id || `question_${index + 1}`,
-  }));
-}
-
-function getModelPrice(model: string): {
-  cachedInput: number;
-  input: number;
-  output: number;
-} {
-  if (model.includes('flash')) {
-    return { cachedInput: 0.014, input: 0.44, output: 1.32 };
-  }
-  return { cachedInput: 0.044, input: 1.32, output: 3.96 };
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function jobHash(input: JobAnalyzeInput, resumeText: string, stories: StoryInput[]) {
+  return hash(
+    JSON.stringify({
+      version: 'agents-v1',
+      profileId: input.profileId,
+      targetRole: input.targetRole,
+      company: input.company ?? null,
+      jobDescription: input.jobDescription,
+      resumeText,
+      stories,
+    }),
+  );
 }

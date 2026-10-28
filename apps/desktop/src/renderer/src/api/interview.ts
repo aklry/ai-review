@@ -3,6 +3,9 @@ import type {
   EvaluationReport,
   InterviewQuestion,
   InterviewSessionCreateInput,
+  Difficulty,
+  InterviewLanguage,
+  InterviewRound,
   JobRecord,
   JobAnalyzeInput,
   ProfileInput,
@@ -23,7 +26,18 @@ export type SessionRecord = {
   id: string;
   status: string;
   currentQuestionIndex: number;
-  questions: InterviewQuestion[];
+  activeQuestionId: string | null;
+  version: number;
+  questions: Array<InterviewQuestion & { answer?: unknown }>;
+  plan: {
+    profileId: string;
+    jobId: string;
+    language: InterviewLanguage;
+    round: InterviewRound;
+    difficulty: Difficulty;
+    profile: { resumeText: string; displayName?: string | null };
+    job: Pick<JobRecord, 'targetRole' | 'company' | 'description' | 'analysis' | 'analysisStatus'>;
+  };
 };
 
 export type CoachingResult = {
@@ -37,6 +51,9 @@ export type CoachingResult = {
     followUpQuestion?: string;
   };
   nextQuestion: InterviewQuestion | null;
+  currentQuestionIndex: number;
+  activeQuestionId: string | null;
+  status: string;
   degraded: boolean;
   model: string;
 };
@@ -88,7 +105,13 @@ export function createInterviewSession(input: InterviewSessionCreateInput): Prom
 }
 
 export function submitAnswer(sessionId: string, input: AnswerSubmitInput): Promise<CoachingResult> {
-  return request({ method: 'POST', url: `/interview-sessions/${sessionId}/answers`, data: input });
+  // CoachAgent and an optional InterviewerAgent call can each use 120 seconds.
+  return request({
+    method: 'POST',
+    url: `/interview-sessions/${sessionId}/answers`,
+    data: input,
+    timeout: 300_000,
+  });
 }
 
 export function finishInterviewSession(sessionId: string): Promise<EvaluationReport> {

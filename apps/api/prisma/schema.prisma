@@ -7,41 +7,43 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
-model CandidateProfile {
-  id               String   @id @default(cuid())
-  userKey          String   @default("local-user")
-  displayName      String?
-  resumeText       String
-  structuredResume Json?
-  resumeSource     String   @default("text")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
 
-  resumeDocument   ResumeDocument?
-  jobs             Job[]
-  stories          Story[]
-  plans            InterviewPlan[]
+model CandidateProfile {
+  id                   String   @id @default(cuid())
+  userKey              String   @default("local-user")
+  displayName          String?
+  resumeText           String
+  structuredResume     Json?
+  structuredResumeHash String?
+  resumeSource         String   @default("text")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  resumeDocument ResumeDocument?
+  jobs           Job[]
+  stories        Story[]
+  plans          InterviewPlan[]
 }
 
 model ResumeDocument {
-  id              String    @id @default(cuid())
-  profileId       String?   @unique
-  userKey         String    @default("local-user")
-  bucket          String
-  objectKey       String    @unique
-  originalName    String
-  mimeType        String
-  extension       String
-  sizeBytes       Int
-  sha256          String
-  parseStatus     String    @default("pending")
-  parseError      String?
-  parserVersion   String    @default("resume-parser-v1")
-  extractedChars  Int       @default(0)
-  createdAt       DateTime  @default(now())
-  parsedAt        DateTime?
+  id             String    @id @default(cuid())
+  profileId      String?   @unique
+  userKey        String    @default("local-user")
+  bucket         String
+  objectKey      String    @unique
+  originalName   String
+  mimeType       String
+  extension      String
+  sizeBytes      Int
+  sha256         String
+  parseStatus    String    @default("pending")
+  parseError     String?
+  parserVersion  String    @default("resume-parser-v1")
+  extractedChars Int       @default(0)
+  createdAt      DateTime  @default(now())
+  parsedAt       DateTime?
 
-  profile         CandidateProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  profile CandidateProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
 
   @@index([userKey, createdAt])
   @@index([userKey, sha256])
@@ -49,19 +51,23 @@ model ResumeDocument {
 }
 
 model Job {
-  id              String            @id @default(cuid())
-  profileId       String
-  targetRole      String
-  company         String?
-  description     String
-  analysis        Json?
-  analysisStatus  String            @default("pending")
-  analysisError   String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id                 String    @id @default(cuid())
+  profileId          String
+  targetRole         String
+  company            String?
+  description        String
+  analysis           Json?
+  analysisStatus     String    @default("pending")
+  analysisError      String?
+  inputHash          String?   @unique
+  analysisLeaseOwner String?
+  analysisLeaseUntil DateTime?
+  analysisAttempts   Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  profile         CandidateProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  plans           InterviewPlan[]
+  profile CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  plans   InterviewPlan[]
 
   @@index([profileId])
 }
@@ -78,75 +84,83 @@ model Story {
   metrics   String[]
   createdAt DateTime @default(now())
 
-  profile   CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
 }
 
 model InterviewPlan {
-  id           String   @id @default(cuid())
-  profileId    String
-  jobId        String
-  language     String
-  round        String
-  difficulty   String
+  id            String   @id @default(cuid())
+  profileId     String
+  jobId         String
+  language      String
+  round         String
+  difficulty    String
   questionCount Int
-  createdAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
 
-  profile      CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  job          Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  sessions     InterviewSession[]
+  profile  CandidateProfile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  job      Job                @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  sessions InterviewSession[]
 
   @@index([profileId])
   @@index([jobId])
 }
 
 model InterviewSession {
-  id                  String   @id @default(cuid())
-  planId              String
-  mode                String   @default("simulation")
-  status              String   @default("active")
-  currentQuestionIndex Int      @default(0)
-  startedAt           DateTime @default(now())
-  endedAt             DateTime?
+  id                   String    @id @default(cuid())
+  planId               String
+  mode                 String    @default("simulation")
+  status               String    @default("active")
+  currentQuestionIndex Int       @default(0)
+  activeQuestionId     String?
+  version              Int       @default(0)
+  turnLeaseToken       String?
+  turnLeaseUntil       DateTime?
+  startedAt            DateTime  @default(now())
+  endedAt              DateTime?
 
-  plan                InterviewPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  questions           InterviewQuestion[]
-  answers             InterviewAnswer[]
-  cues                CoachingCue[]
-  report              EvaluationReport?
-  usage               UsageLedger[]
+  plan      InterviewPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  questions InterviewQuestion[]
+  answers   InterviewAnswer[]
+  cues      CoachingCue[]
+  report    EvaluationReport?
+  usage     UsageLedger[]
 
   @@index([planId])
 }
 
 model InterviewQuestion {
-  id         String   @id @default(cuid())
-  sessionId  String
-  order      Int
-  competency String
-  difficulty String
-  prompt     String
-  isCore     Boolean
-  createdAt  DateTime @default(now())
+  id               String   @id @default(cuid())
+  sessionId        String
+  order            Int
+  competency       String
+  difficulty       String
+  prompt           String
+  isCore           Boolean
+  parentQuestionId String?
+  createdAt        DateTime @default(now())
 
-  session    InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  answer     InterviewAnswer?
+  session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  answer  InterviewAnswer?
 
   @@unique([sessionId, order])
   @@index([sessionId])
+  @@index([parentQuestionId])
 }
 
 model InterviewAnswer {
-  id         String   @id @default(cuid())
-  sessionId  String
-  questionId String   @unique
-  answerText String
-  createdAt  DateTime @default(now())
+  id          String   @id @default(cuid())
+  sessionId   String
+  questionId  String   @unique
+  answerText  String
+  requestHash String?
+  result      Json?
+  createdAt   DateTime @default(now())
 
-  session    InterviewSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  question  InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  cue       CoachingCue?
+  session  InterviewSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  cue      CoachingCue?
 
   @@index([sessionId])
 }
@@ -164,8 +178,8 @@ model CoachingCue {
   followUpQuestion String?
   createdAt        DateTime @default(now())
 
-  session           InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  answer            InterviewAnswer  @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  answer  InterviewAnswer  @relation(fields: [answerId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
 }
@@ -174,14 +188,15 @@ model EvaluationReport {
   id               String   @id @default(cuid())
   sessionId        String   @unique
   summary          String
-  overallScore     Float
+  overallScore     Float?
+  scoringVersion   String   @default("legacy-v1")
   competencyScores Json
   strengths        String[]
   gaps             String[]
   nextPlan         Json
   createdAt        DateTime @default(now())
 
-  session           InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
 model UsageLedger {
@@ -190,14 +205,16 @@ model UsageLedger {
   sessionId         String?
   model             String
   taskType          String
+  operationId       String?
+  promptVersion     String?
   inputTokens       Int      @default(0)
   outputTokens      Int      @default(0)
   cachedInputTokens Int      @default(0)
   degraded          Boolean  @default(false)
-  estimatedCostCny   Float    @default(0)
+  estimatedCostCny  Float    @default(0)
   createdAt         DateTime @default(now())
 
-  session            InterviewSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  session InterviewSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
   @@index([userKey, createdAt])
   @@index([sessionId])

@@ -1,5 +1,4 @@
 import type {
-  CoachingCue,
   EvaluationReport,
   InterviewQuestion,
   InterviewSessionCreateInput,
@@ -10,12 +9,18 @@ import type {
 } from '@interview-assistant/contracts';
 import { Prisma } from '../generated/prisma/client.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { SessionRepository, type TurnCommit } from './session.repository.js';
+import { toCue } from './cue-record.js';
 
 export type InterviewSessionRecord = {
   id: string;
   status: string;
   currentQuestionIndex: number;
+  activeQuestionId: string | null;
+  version: number;
   plan: {
+    profileId: string;
+    jobId: string;
     language: string;
     profile: { resumeText: string };
     job: {
@@ -25,7 +30,16 @@ export type InterviewSessionRecord = {
       analysis: unknown;
     };
   };
-  questions: Array<InterviewQuestion>;
+  questions: Array<
+    InterviewQuestion & {
+      answer?: {
+        answerText: string;
+        requestHash: string | null;
+        result: unknown;
+        cue: Record<string, unknown> | null;
+      } | null;
+    }
+  >;
   cues: Array<Record<string, unknown>>;
   report: Record<string, unknown> | null;
 };
@@ -42,7 +56,125 @@ export type JobRecord = {
 };
 
 export class InterviewRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  private readonly sessions: SessionRepository;
+  constructor(private readonly prisma: PrismaClient) {
+    this.sessions = new SessionRepository(prisma);
+  }
+
+  createWorkflowSession(input: InterviewSessionCreateInput, questions: InterviewQuestion[]) {
+    return this.sessions.create(input, questions);
+  }
+  claimSession(id: string, version: number, token: string, until: Date) {
+    return this.sessions.claim(id, version, token, until);
+  }
+  renewSession(id: string, token: string, until: Date) {
+    return this.sessions.renew(id, token, until);
+  }
+  releaseSession(id: string, token: string) {
+    return this.sessions.release(id, token);
+  }
+  commitTurn(input: TurnCommit) {
+    return this.sessions.commit(input);
+  }
+  finishWorkflowSession(id: string, report: EvaluationReport, version: number, token: string) {
+    return this.sessions.finish(id, report, version, token);
+  }
+
+  saveStructuredProfile(id: string, hash: string, profile: unknown) {
+    return this.prisma.candidateProfile.update({
+      where: { id },
+      data: { structuredResume: profile as Prisma.InputJsonValue, structuredResumeHash: hash },
+    });
+  }
+
+  async claimJob(id: string, owner: string, until: Date) {
+    const result = await this.prisma.job.updateMany({
+      where: {
+        id,
+        analysisStatus: 'processing',
+        analysisAttempts: { lt: 3 },
+        OR: [{ analysisLeaseOwner: null }, { analysisLeaseUntil: { lt: new Date() } }],
+      },
+      data: {
+        analysisLeaseOwner: owner,
+        analysisLeaseUntil: until,
+        analysisAttempts: { increment: 1 },
+      },
+    });
+    return result.count === 1;
+  }
+  renewJob(id: string, owner: string, until: Date) {
+    return this.prisma.job.updateMany({
+      where: { id, analysisLeaseOwner: owner },
+      data: { analysisLeaseUntil: until },
+    });
+  }
+  async completeJob(id: string, owner: string, analysis: JobAnalysis) {
+    const result = await this.prisma.job.updateMany({
+      where: { id, analysisLeaseOwner: owner },
+      data: {
+        analysis: analysis as Prisma.InputJsonValue,
+        analysisStatus: 'completed',
+        analysisError: null,
+        analysisLeaseOwner: null,
+        analysisLeaseUntil: null,
+      },
+    });
+    if (result.count !== 1) throw new Error('Job analysis lease was lost');
+  }
+  failJob(id: string, owner: string, message: string) {
+    return this.prisma.job.updateMany({
+      where: { id, analysisLeaseOwner: owner },
+      data: {
+        analysisStatus: 'failed',
+        analysisError: message.slice(0, 500),
+        analysisLeaseOwner: null,
+        analysisLeaseUntil: null,
+      },
+    });
+  }
+  async recoverableJobs() {
+    await this.prisma.job.updateMany({
+      where: {
+        analysisStatus: 'processing',
+        analysisAttempts: { gte: 3 },
+        OR: [{ analysisLeaseUntil: null }, { analysisLeaseUntil: { lt: new Date() } }],
+      },
+      data: {
+        analysisStatus: 'failed',
+        analysisError: 'Analysis interrupted repeatedly; please retry',
+        analysisLeaseOwner: null,
+        analysisLeaseUntil: null,
+      },
+    });
+    return this.prisma.job.findMany({
+      where: {
+        analysisStatus: 'processing',
+        analysisAttempts: { lt: 3 },
+        OR: [{ analysisLeaseUntil: null }, { analysisLeaseUntil: { lt: new Date() } }],
+      },
+      take: 5,
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  findJobByHash(inputHash: string) {
+    return this.prisma.job.findUnique({ where: { inputHash } });
+  }
+  async createWorkflowJob(input: JobAnalyzeInput, inputHash: string) {
+    return this.prisma.job.upsert({
+      where: { inputHash },
+      update: {},
+      create: {
+        profileId: input.profileId,
+        targetRole: input.targetRole,
+        company: input.company ?? null,
+        description: input.jobDescription,
+        inputHash,
+        analysisStatus: 'processing',
+      },
+    });
+  }
 
   createProfile(input: ProfileInput) {
     return this.prisma.candidateProfile.create({
@@ -54,66 +186,6 @@ export class InterviewRepository {
     });
   }
 
-  createJob(input: JobAnalyzeInput, analysis: JobAnalysis) {
-    return this.prisma.job.create({
-      data: {
-        profileId: input.profileId,
-        targetRole: input.targetRole,
-        description: input.jobDescription,
-        analysis: analysis as Prisma.InputJsonValue,
-        analysisStatus: 'completed',
-        analysisError: null,
-        ...(input.company ? { company: input.company } : {}),
-      },
-    });
-  }
-
-  createProcessingJob(input: JobAnalyzeInput) {
-    return this.prisma.job.create({
-      data: {
-        profileId: input.profileId,
-        targetRole: input.targetRole,
-        description: input.jobDescription,
-        analysis: Prisma.DbNull,
-        analysisStatus: 'processing',
-        analysisError: null,
-        ...(input.company ? { company: input.company } : {}),
-      },
-    });
-  }
-
-  updateJobAnalysis(jobId: string, analysis: JobAnalysis) {
-    return this.prisma.job.update({
-      where: { id: jobId },
-      data: {
-        analysis: analysis as Prisma.InputJsonValue,
-        analysisStatus: 'completed',
-        analysisError: null,
-      },
-    });
-  }
-
-  markJobAnalysisFailed(jobId: string, errorMessage: string) {
-    return this.prisma.job.update({
-      where: { id: jobId },
-      data: {
-        analysisStatus: 'failed',
-        analysisError: errorMessage,
-      },
-    });
-  }
-
-  findJobByInput(input: JobAnalyzeInput) {
-    return this.prisma.job.findFirst({
-      where: {
-        profileId: input.profileId,
-        targetRole: input.targetRole,
-        company: input.company ?? null,
-        description: input.jobDescription,
-      },
-    });
-  }
-
   async retryFailedJob(jobId: string): Promise<boolean> {
     const result = await this.prisma.job.updateMany({
       where: { id: jobId, analysisStatus: 'failed' },
@@ -121,6 +193,9 @@ export class InterviewRepository {
         analysis: Prisma.DbNull,
         analysisStatus: 'processing',
         analysisError: null,
+        analysisLeaseOwner: null,
+        analysisLeaseUntil: null,
+        analysisAttempts: 0,
       },
     });
     return result.count === 1;
@@ -137,139 +212,6 @@ export class InterviewRepository {
         action: input.action,
         result: input.result,
         metrics: input.metrics,
-      },
-    });
-  }
-
-  async createSession(
-    input: InterviewSessionCreateInput,
-    questions: InterviewQuestion[],
-  ): Promise<{ id: string; planId: string; questions: InterviewQuestion[] }> {
-    const plan = await this.prisma.interviewPlan.create({
-      data: {
-        profileId: input.profileId,
-        jobId: input.jobId,
-        language: input.language,
-        round: input.round,
-        difficulty: input.difficulty,
-        questionCount: input.questionCount,
-      },
-    });
-    const session = await this.prisma.interviewSession.create({
-      data: {
-        planId: plan.id,
-        mode: 'simulation',
-      },
-    });
-    const persistedQuestions = questions.map((question, order) => ({
-      ...question,
-      // Model-provided ids are not database ids. Scope them to this session and
-      // order so repeated model output cannot violate InterviewQuestion.id.
-      id: `${session.id}:${order}:${question.id}`,
-    }));
-    await this.prisma.interviewQuestion.createMany({
-      data: persistedQuestions.map((question, order) => ({
-        sessionId: session.id,
-        order,
-        id: question.id,
-        competency: question.competency,
-        difficulty: question.difficulty,
-        prompt: question.prompt,
-        isCore: question.isCore,
-      })),
-    });
-
-    return { id: session.id, planId: plan.id, questions: persistedQuestions };
-  }
-
-  async saveAnswerFeedback(input: {
-    sessionId: string;
-    questionId: string;
-    answerText: string;
-    cue: CoachingCue;
-  }): Promise<{ answerId: string; cueId: string }> {
-    const answer = await this.prisma.interviewAnswer.upsert({
-      where: { questionId: input.questionId },
-      create: {
-        sessionId: input.sessionId,
-        questionId: input.questionId,
-        answerText: input.answerText,
-      },
-      update: {
-        answerText: input.answerText,
-      },
-    });
-    const cue = await this.prisma.coachingCue.upsert({
-      where: { answerId: answer.id },
-      create: {
-        sessionId: input.sessionId,
-        answerId: answer.id,
-        competency: input.cue.competency,
-        score: input.cue.score,
-        strengths: input.cue.strengths,
-        gaps: input.cue.gaps,
-        nextAction: input.cue.nextAction,
-        evidence: input.cue.evidence as Prisma.InputJsonValue,
-        ...(input.cue.followUpQuestion ? { followUpQuestion: input.cue.followUpQuestion } : {}),
-      },
-      update: {
-        competency: input.cue.competency,
-        score: input.cue.score,
-        strengths: input.cue.strengths,
-        gaps: input.cue.gaps,
-        nextAction: input.cue.nextAction,
-        evidence: input.cue.evidence as Prisma.InputJsonValue,
-        followUpQuestion: input.cue.followUpQuestion ?? null,
-      },
-    });
-    await this.prisma.interviewSession.update({
-      where: { id: input.sessionId },
-      data: { currentQuestionIndex: { increment: 1 } },
-    });
-
-    return { answerId: answer.id, cueId: cue.id };
-  }
-
-  createFollowUpQuestion(sessionId: string, question: InterviewQuestion, order: number) {
-    return this.prisma.interviewQuestion.create({
-      data: {
-        sessionId,
-        order,
-        id: question.id,
-        competency: question.competency,
-        difficulty: question.difficulty,
-        prompt: question.prompt,
-        isCore: question.isCore,
-      },
-    });
-  }
-
-  async finishSession(sessionId: string, report: EvaluationReport) {
-    await this.prisma.interviewSession.update({
-      where: { id: sessionId },
-      data: {
-        status: 'completed',
-        endedAt: new Date(),
-      },
-    });
-    return this.prisma.evaluationReport.upsert({
-      where: { sessionId },
-      create: {
-        sessionId,
-        summary: report.summary,
-        overallScore: report.overallScore,
-        competencyScores: report.competencyScores as Prisma.InputJsonValue,
-        strengths: report.strengths,
-        gaps: report.gaps,
-        nextPlan: report.nextPlan as Prisma.InputJsonValue,
-      },
-      update: {
-        summary: report.summary,
-        overallScore: report.overallScore,
-        competencyScores: report.competencyScores as Prisma.InputJsonValue,
-        strengths: report.strengths,
-        gaps: report.gaps,
-        nextPlan: report.nextPlan as Prisma.InputJsonValue,
       },
     });
   }
@@ -297,17 +239,39 @@ export class InterviewRepository {
           orderBy: { order: 'asc' },
           include: { answer: { include: { cue: true } } },
         },
-        cues: true,
+        cues: { orderBy: { createdAt: 'asc' } },
         report: true,
       },
     });
     return session as unknown as InterviewSessionRecord;
   }
 
-  getReport(sessionId: string) {
-    return this.prisma.evaluationReport.findUniqueOrThrow({
+  async getReport(sessionId: string) {
+    const report = await this.prisma.evaluationReport.findUniqueOrThrow({
       where: { sessionId },
+      include: {
+        session: {
+          include: {
+            questions: {
+              include: { answer: { include: { cue: true } } },
+            },
+          },
+        },
+      },
     });
+    const { session, ...data } = report;
+    const scores = report.competencyScores as Record<string, number | null>;
+    const measured = Object.values(scores).filter((value) => value !== null).length;
+    return {
+      ...data,
+      cues: session.questions.flatMap((q) =>
+        !q.parentQuestionId && q.answer?.cue ? [toCue(q.answer.cue)] : [],
+      ),
+      supplementalCues: session.questions.flatMap((q) =>
+        q.parentQuestionId && q.answer?.cue ? [toCue(q.answer.cue)] : [],
+      ),
+      assessmentStatus: measured === 4 ? 'complete' : measured === 0 ? 'unassessed' : 'partial',
+    };
   }
 
   recordUsage(input: {
@@ -320,6 +284,8 @@ export class InterviewRepository {
     cachedInputTokens: number;
     degraded: boolean;
     estimatedCostCny: number;
+    operationId?: string;
+    promptVersion?: string;
   }) {
     return this.prisma.usageLedger.create({
       data: {
@@ -331,6 +297,8 @@ export class InterviewRepository {
         cachedInputTokens: input.cachedInputTokens,
         degraded: input.degraded,
         estimatedCostCny: input.estimatedCostCny,
+        ...(input.operationId ? { operationId: input.operationId } : {}),
+        ...(input.promptVersion ? { promptVersion: input.promptVersion } : {}),
         ...(input.sessionId ? { sessionId: input.sessionId } : {}),
       },
     });

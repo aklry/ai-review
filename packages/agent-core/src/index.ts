@@ -17,10 +17,11 @@ const competencies: Competency[] = [
   'project-depth',
 ];
 
-export function calculateWeightedScore(scores: CompetencyScores): number {
+export function calculateWeightedScore(scores: CompetencyScores): number | null {
   const validScores = competencyScoresSchema.parse(scores);
+  if (competencies.some((competency) => validScores[competency] === null)) return null;
   const weightedScore = competencies.reduce((total, competency) => {
-    const score = validScores[competency];
+    const score = validScores[competency]!;
     return total + (score / 5) * scoreWeights[competency];
   }, 0);
 
@@ -40,7 +41,7 @@ export function normalizeCompetencyScores(cues: CoachingCue[]): CompetencyScores
     Object.fromEntries(
       competencies.map((competency) => {
         const scores = totals[competency];
-        if (scores.length === 0) return [competency, 3];
+        if (scores.length === 0) return [competency, null];
         return [
           competency,
           Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length),
@@ -71,11 +72,12 @@ export function parseModelJson<T extends z.ZodTypeAny>(schema: T, content: strin
     try {
       return schema.parse(parsed);
     } catch (firstError) {
-      const repaired = repairQuestionSet(parsed);
-      const repairedCue = repairCoachingCue(repaired);
-      if (repairedCue !== parsed) return schema.parse(repairedCue);
-      const repairedReport = repairEvaluationReport(repaired);
-      if (repairedReport !== parsed) return schema.parse(repairedReport);
+      for (const repair of [repairQuestionSet, repairCoachingCue, repairEvaluationReport]) {
+        const repaired = repair(parsed);
+        if (repaired === parsed) continue;
+        const candidate = schema.safeParse(repaired);
+        if (candidate.success) return candidate.data;
+      }
       throw firstError;
     }
   } catch (error) {
@@ -95,35 +97,7 @@ function repairEvaluationReport(value: unknown): unknown {
     );
   if (!hasReportShape) return value;
   const source = (root.report ?? root.result ?? root) as Record<string, unknown>;
-  const scores: Record<string, unknown> =
-    source.competencyScores && typeof source.competencyScores === 'object'
-      ? (source.competencyScores as Record<string, unknown>)
-      : {};
-  const plan = Array.isArray(source.nextPlan) ? source.nextPlan : [];
-  const defaultPlan = Array.from({ length: 7 }, (_, index) => ({
-    day: index + 1,
-    focus: 'project-depth',
-    task: '补充一个 STAR 项目故事。',
-    reason: '完善回答证据。',
-  }));
-  return {
-    ...source,
-    summary:
-      typeof source.summary === 'string' && source.summary.trim()
-        ? source.summary
-        : '本次面试已完成。',
-    overallScore: typeof source.overallScore === 'number' ? source.overallScore : 0,
-    competencyScores: {
-      'vue-react': Number(scores['vue-react']) || 3,
-      'ai-application': Number(scores['ai-application']) || 3,
-      'system-design': Number(scores['system-design']) || 3,
-      'project-depth': Number(scores['project-depth']) || 3,
-    },
-    cues: Array.isArray(source.cues) ? source.cues : [],
-    strengths: Array.isArray(source.strengths) ? source.strengths : [],
-    gaps: Array.isArray(source.gaps) ? source.gaps : [],
-    nextPlan: plan.length === 7 ? plan : defaultPlan,
-  };
+  return source;
 }
 
 function repairCoachingCue(value: unknown): unknown {
@@ -161,22 +135,18 @@ function repairCoachingCue(value: unknown): unknown {
     behavioral: 'project-depth',
   };
   const rawScore = Number(cue.score ?? cue.rating ?? cue.level);
-  const score = Number.isFinite(rawScore) ? Math.max(1, Math.min(5, Math.round(rawScore))) : 3;
+  const score = Number.isFinite(rawScore) ? rawScore : undefined;
   const strengths = Array.isArray(cue.strengths) ? cue.strengths : [];
   const gaps = Array.isArray(cue.gaps)
     ? cue.gaps
     : Array.isArray(cue.weaknesses)
       ? cue.weaknesses
       : [];
-  const nextAction =
-    cue.nextAction ?? cue.recommendation ?? cue.action ?? '补充具体事实、过程和结果。';
-  const evidence =
-    Array.isArray(cue.evidence) && cue.evidence.length > 0
-      ? cue.evidence
-      : [{ source: 'history', quote: '本次回答未提供可引用证据。' }];
+  const nextAction = cue.nextAction ?? cue.recommendation ?? cue.action;
+  const evidence = cue.evidence;
   return {
     ...cue,
-    competency: aliases[competency] ?? (competency || 'project-depth'),
+    competency: aliases[competency] ?? competency,
     score,
     strengths,
     gaps,
@@ -360,3 +330,11 @@ export function buildReportPrompt(input: {
 }
 
 export { questionInventory, scoreWeights } from '@interview-assistant/contracts';
+
+export * from './agents/model-gateway.js';
+export * from './agents/profile-agent.js';
+export * from './agents/job-agent.js';
+export * from './agents/interviewer-agent.js';
+export * from './agents/coach-agent.js';
+export * from './agents/report-agent.js';
+export * from './workflows/interview-workflows.js';
