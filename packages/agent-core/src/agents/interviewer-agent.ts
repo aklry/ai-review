@@ -40,7 +40,7 @@ export class InterviewerAgent {
       input: questionAgentInputSchema,
       output: questionSetSchema,
       instructions:
-        'Generate the requested number of questions. For 8 questions use competency counts 1 vue-react, 2 ai-application, 2 system-design, 3 project-depth. For 4 or more questions cover all four competencies with at least one core question each. Do not invent candidate facts.',
+        'Generate the requested number of questions using the supplied per-question template. Replace only each prompt with a concrete interview question; preserve competency, difficulty, isCore and order. For 8 questions use competency counts 1 vue-react, 2 ai-application, 2 system-design, 3 project-depth. For 4 or more questions cover all four competencies with at least one core question each. Do not invent candidate facts.',
       context: ({ company, ...input }) =>
         buildQuestionPrompt({
           ...input,

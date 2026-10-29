@@ -7,10 +7,58 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAnalysisPrompt,
   buildCoachingPrompt,
+  buildQuestionPrompt,
   calculateWeightedScore,
   normalizeCompetencyScores,
   parseModelJson,
 } from './index.js';
+
+describe('buildQuestionPrompt', () => {
+  it.each([
+    [1, ['vue-react']],
+    [4, ['vue-react', 'ai-application', 'system-design', 'project-depth']],
+    [
+      8,
+      [
+        'vue-react',
+        'ai-application',
+        'ai-application',
+        'system-design',
+        'system-design',
+        'project-depth',
+        'project-depth',
+        'project-depth',
+      ],
+    ],
+  ])('provides explicit question slots and core flags for %i questions', (count, expected) => {
+    const prompt = buildQuestionPrompt({
+      targetRole: 'Frontend',
+      language: 'zh-CN',
+      round: 'technical',
+      difficulty: 'l3',
+      questionCount: count,
+      jobAnalysis: {},
+      profileSummary: 'Frontend engineer',
+      stories: [],
+    });
+    const templateLine = prompt.split('\n').find((line) => line.startsWith('题目结构模板：'));
+    expect(templateLine).toBeDefined();
+    const template = questionSetSchema.parse(
+      JSON.parse(templateLine!.slice('题目结构模板：'.length)),
+    );
+    expect(template.questions.map((question) => question.competency)).toEqual(expected);
+    expect(template.questions.every((question) => question.difficulty === 'l3')).toBe(true);
+    expect(
+      template.questions
+        .filter((question) => question.isCore)
+        .map((question) => question.competency),
+    ).toEqual(
+      count === 1
+        ? ['vue-react']
+        : ['vue-react', 'ai-application', 'system-design', 'project-depth'],
+    );
+  });
+});
 
 describe('calculateWeightedScore', () => {
   it('returns 100 when every competency is scored at five', () => {

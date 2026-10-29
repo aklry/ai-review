@@ -290,6 +290,36 @@ export function buildQuestionPrompt(input: {
   profileSummary: string;
   stories: StoryInput[];
 }): string {
+  const sequence: Competency[] =
+    input.questionCount === 8
+      ? [
+          'vue-react',
+          'ai-application',
+          'ai-application',
+          'system-design',
+          'system-design',
+          'project-depth',
+          'project-depth',
+          'project-depth',
+        ]
+      : Array.from(
+          { length: input.questionCount },
+          (_, index) => competencies[index % competencies.length]!,
+        );
+  const covered = new Set<Competency>();
+  const template = {
+    questions: sequence.map((competency, index) => {
+      const isCore = !covered.has(competency);
+      covered.add(competency);
+      return {
+        id: `q${index + 1}`,
+        competency,
+        difficulty: input.difficulty,
+        isCore,
+        prompt: isCore ? '替换为该维度的核心面试题' : '替换为该维度的补充面试题',
+      };
+    }),
+  };
   return [
     '你是 Interview Assistant 的 Interviewer Agent。',
     '根据岗位、候选人事实和能力模型生成文字模拟面试题。',
@@ -305,6 +335,8 @@ export function buildQuestionPrompt(input: {
     `岗位能力分析：${JSON.stringify(input.jobAnalysis)}`,
     `候选人档案摘要：${input.profileSummary}`,
     `候选人已确认故事：${JSON.stringify(input.stories)}`,
+    '严格按照以下逐题模板生成，只替换 prompt 为具体面试题，保留每题其他字段、题目数量和顺序。isCore 为 true 的题目必须考查该维度的核心能力。',
+    `题目结构模板：${JSON.stringify(template)}`,
   ].join('\n');
 }
 

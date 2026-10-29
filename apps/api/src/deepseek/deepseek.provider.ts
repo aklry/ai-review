@@ -70,6 +70,8 @@ type ChatCompletionPayload = {
   error?: { message?: unknown };
 };
 
+class InvalidModelOutputException extends BadGatewayException {}
+
 @Injectable()
 export class DeepSeekProvider {
   private readonly apiKey: string;
@@ -118,10 +120,24 @@ export class DeepSeekProvider {
     try {
       return await this.generateWithModel(request, this.primaryModel, false, primaryDeadline);
     } catch (primaryError) {
-      if (this.fallbackModel === this.primaryModel) {
+      const invalidOutput = primaryError instanceof InvalidModelOutputException;
+      if (this.fallbackModel === this.primaryModel && !invalidOutput) {
         throw primaryError;
       }
-      return this.generateWithModel(request, this.fallbackModel, true, deadline);
+      // A rejected output gets one correction attempt, including when both
+      // model names are identical. Keep it within the original deadline.
+      const retryRequest = invalidOutput
+        ? {
+            ...request,
+            systemPrompt: `${request.systemPrompt}\nYour previous response failed validation: ${primaryError.message}\nReturn a corrected JSON object satisfying every schema and task requirement.`,
+          }
+        : request;
+      return this.generateWithModel(
+        retryRequest,
+        this.fallbackModel,
+        this.fallbackModel !== this.primaryModel,
+        deadline,
+      );
     }
   }
 
@@ -208,7 +224,9 @@ export class DeepSeekProvider {
         // Zod's message contains only schema paths and validation reasons; it
         // does not include the resume, JD, prompt, or API key.
         console.warn(`[deepseek] invalid structured output: ${detail}`);
-        throw new BadGatewayException(`DeepSeek returned invalid structured output: ${detail}`);
+        throw new InvalidModelOutputException(
+          `DeepSeek returned invalid structured output: ${detail}`,
+        );
       }
       const message = error instanceof Error ? error.message : 'Unknown DeepSeek error';
       throw new ServiceUnavailableException(`DeepSeek service unavailable: ${message}`);
