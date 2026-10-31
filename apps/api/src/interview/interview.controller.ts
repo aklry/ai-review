@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import {
   answerSubmitInputSchema,
   interviewSessionCreateInputSchema,
   jobAnalyzeInputSchema,
   profileInputSchema,
   storyInputSchema,
+  sessionHistoryQuerySchema,
 } from '@interview-assistant/contracts';
 import { InterviewService } from './interview.service.js';
 
@@ -35,6 +36,16 @@ export class InterviewController {
   @Post('interview-sessions')
   createSession(@Body() body: unknown) {
     return this.interviewService.createSession(interviewSessionCreateInputSchema.parse(body));
+  }
+
+  @Get('interview-sessions')
+  listSessions(@Query() query: unknown) {
+    return this.interviewService.listSessions(sessionHistoryQuerySchema.parse(query));
+  }
+
+  @Get('interview-sessions/:id/review')
+  getSessionReview(@Param('id') sessionId: string) {
+    return this.interviewService.getSessionReview(sessionId);
   }
 
   @Post('interview-sessions/:id/answers')

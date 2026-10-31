@@ -13,6 +13,26 @@ import type {
   StoryInput,
 } from '@interview-assistant/contracts';
 import { request, apiClient } from '../lib/http.js';
+import {
+  sessionHistoryPageSchema,
+  sessionReviewSchema,
+  type SessionHistoryQuery,
+} from '@interview-assistant/contracts';
+
+export async function getSessionHistory(query: SessionHistoryQuery) {
+  return sessionHistoryPageSchema.parse(
+    await request({ method: 'GET', url: '/interview-sessions', params: query }),
+  );
+}
+
+export async function getSessionReview(sessionId: string) {
+  return sessionReviewSchema.parse(
+    await request({
+      method: 'GET',
+      url: `/interview-sessions/${encodeURIComponent(sessionId)}/review`,
+    }),
+  );
+}
 
 export type ProfileRecord = {
   id: string;

@@ -228,6 +228,76 @@ export const evaluationReportSchema = z.object({
 });
 export type EvaluationReport = z.infer<typeof evaluationReportSchema>;
 
+/** Read historical plans as stored; only evidence-v2 promises distinct days. */
+export const persistedReportSchema = evaluationReportSchema
+  .extend({ nextPlan: z.array(trainingDaySchema).length(7) })
+  .superRefine((report, context) => {
+    if (
+      report.scoringVersion === 'evidence-v2' &&
+      new Set(report.nextPlan.map((day) => day.day)).size !== 7
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['nextPlan'],
+        message: 'New reports must cover each training day exactly once',
+      });
+    }
+  });
+
+export const sessionStatusSchema = z.enum(['active', 'awaiting_finish', 'completed']);
+export const sessionHistoryQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(10),
+  status: sessionStatusSchema.optional(),
+});
+export type SessionHistoryQuery = z.infer<typeof sessionHistoryQuerySchema>;
+
+export const sessionHistoryItemSchema = z.object({
+  id: z.string().min(1),
+  status: sessionStatusSchema,
+  targetRole: z.string(),
+  company: z.string().nullable(),
+  language: interviewLanguageSchema,
+  round: interviewRoundSchema,
+  difficulty: difficultySchema,
+  startedAt: z.string().datetime(),
+  endedAt: z.string().datetime().nullable(),
+  mainQuestionCount: z.number().int().nonnegative(),
+  answeredMainQuestionCount: z.number().int().nonnegative(),
+  followUpCount: z.number().int().nonnegative(),
+  report: z
+    .object({
+      overallScore: z.number().min(0).max(100).nullable(),
+      scoringVersion: z.string(),
+    })
+    .nullable(),
+});
+export type SessionHistoryItem = z.infer<typeof sessionHistoryItemSchema>;
+export const sessionHistoryPageSchema = z.object({
+  items: z.array(sessionHistoryItemSchema),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  total: z.number().int().nonnegative(),
+});
+export type SessionHistoryPage = z.infer<typeof sessionHistoryPageSchema>;
+
+export const sessionReviewSchema = sessionHistoryItemSchema.extend({
+  activeQuestionId: z.string().nullable(),
+  questions: z.array(
+    questionSchema.extend({
+      answer: z
+        .object({
+          answerText: z.string(),
+          createdAt: z.string().datetime(),
+          cue: coachingCueSchema.nullable(),
+        })
+        .nullable(),
+    }),
+  ),
+  report: persistedReportSchema.nullable(),
+});
+export type SessionReview = z.infer<typeof sessionReviewSchema>;
+
 export const scoreWeights = {
   'vue-react': 10,
   'ai-application': 20,

@@ -137,6 +137,78 @@ describe('training store', () => {
     vi.unstubAllGlobals();
   });
 
+  it('resumes an explicitly selected historical session ahead of saved or in-memory IDs', async () => {
+    const store = useTrainingStore();
+    store.sessionId = 'current-session';
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({ sessionId: 'saved-session', jobId: 'old-job' }),
+    );
+    vi.mocked(api.getInterviewSession).mockResolvedValue(session({ id: 'older-session' }));
+    await store.activate('older-session');
+    expect(api.getInterviewSession).toHaveBeenCalledExactlyOnceWith('older-session');
+    expect(store.sessionId).toBe('older-session');
+    expect(store.currentQuestion?.id).toBe(question.id);
+  });
+
+  it('does not fall back to another job when the explicitly selected historical session is missing', async () => {
+    const store = useTrainingStore();
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({ sessionId: 'saved-session', jobId: 'old-job' }),
+    );
+    vi.mocked(api.getInterviewSession).mockRejectedValue(
+      new ApiClientError({
+        code: 404,
+        status: 404,
+        message: 'not found',
+        requestId: 'missing-history',
+      }),
+    );
+    await store.activate('missing-session');
+    expect(api.getJob).not.toHaveBeenCalled();
+    expect(store.sessionId).toBe('');
+    expect(store.phase).toBe('setup');
+    expect(store.errorMessage).toContain('指定训练记录已不存在');
+  });
+
+  it('waits for the selected session mutation even when another session also has a pending write', async () => {
+    const store = useTrainingStore();
+    const pendingA = deferred<CoachingResult>();
+    const pendingB = deferred<CoachingResult>();
+    let committedA = false;
+    vi.mocked(api.getInterviewSession).mockImplementation(async (id) =>
+      session({
+        id,
+        currentQuestionIndex: id === 'A' && committedA ? 1 : 0,
+        activeQuestionId: id === 'A' && committedA ? 'question_2' : question.id,
+      }),
+    );
+    vi.mocked(api.submitAnswer).mockImplementation((id) =>
+      id === 'A' ? pendingA.promise : pendingB.promise,
+    );
+    await store.activate('A');
+    store.answerText = 'Answer A';
+    const writeA = store.sendAnswer();
+    await store.activate('B');
+    store.answerText = 'Answer B';
+    const writeB = store.sendAnswer();
+    const restoreA = store.activate('A');
+    await settle();
+    expect(vi.mocked(api.getInterviewSession).mock.calls.filter(([id]) => id === 'A')).toHaveLength(
+      1,
+    );
+    committedA = true;
+    pendingA.resolve(answerResult());
+    await writeA;
+    await restoreA;
+    expect(store.currentQuestion?.id).toBe('question_2');
+    pendingB.resolve(answerResult());
+    await writeB;
+    expect(store.sessionId).toBe('A');
+    expect(store.currentQuestion?.id).toBe('question_2');
+  });
+
   it('keeps preparation state when the route component is recreated', () => {
     const firstInstance = useTrainingStore();
     firstInstance.profileId = 'profile_1';

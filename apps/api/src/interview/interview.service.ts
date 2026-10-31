@@ -18,6 +18,7 @@ import {
   type JobAnalyzeInput,
   type ProfileInput,
   type StoryInput,
+  type SessionHistoryQuery,
 } from '@interview-assistant/contracts';
 import { WorkflowRuntime } from '../agents/workflow-runtime.service.js';
 import { InterviewRepository, type InterviewSessionRecord } from './interview.repository.js';
@@ -68,6 +69,13 @@ export class InterviewService implements OnApplicationBootstrap, OnModuleDestroy
   }
   getReport(id: string) {
     return this.repository.getReport(id);
+  }
+
+  listSessions(query: SessionHistoryQuery) {
+    return this.repository.listSessions(query);
+  }
+  getSessionReview(id: string) {
+    return this.repository.getSessionReview(id);
   }
 
   async analyzeJob(input: JobAnalyzeInput) {

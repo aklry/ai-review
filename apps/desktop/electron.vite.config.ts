@@ -22,6 +22,9 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src/renderer/src', import.meta.url)),
+        '@interview-assistant/contracts': fileURLToPath(
+          new URL('../../packages/contracts/src/index.ts', import.meta.url),
+        ),
       },
     },
     plugins: [vue()],

@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 
 const route = useRoute();
-const activeRoute = computed(() => route.path);
+const activeRoute = computed(() => (route.path.startsWith('/history') ? '/history' : route.path));
 </script>
 
 <template>
@@ -19,6 +19,7 @@ const activeRoute = computed(() => route.path);
       <el-menu :default-active="activeRoute" router class="navigation">
         <el-menu-item index="/">工作台</el-menu-item>
         <el-menu-item index="/training">训练配置</el-menu-item>
+        <el-menu-item index="/history">历史训练</el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>

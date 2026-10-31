@@ -95,6 +95,8 @@ MinIO 配置优先使用 `MINIO_*` 环境变量；现有 `S3_ENDPOINT`、`S3_ACC
 
 - `/`：工作台与 API 状态
 - `/training`：简历档案、岗位分析、模拟问答和训练报告
+- `/history`：按状态筛选、分页浏览历史训练；进度只统计主问题
+- `/history/:sessionId`：逐题查看原始回答、全部反馈与证据、关联追问及训练报告；未结束的会话可继续训练
 - `src/renderer/src/stores/system.ts`：API 健康状态
 - `src/renderer/src/lib/http.ts`：Axios 实例、请求/响应拦截器
 
@@ -116,6 +118,27 @@ pnpm -F @interview-assistant/api exec vitest run src/agents/workflow-postgres.in
 ```
 
 测试仅创建随机 `agent_test_*` schema，在其中验证全部迁移、旧会话恢复、跨连接 checkpoint 恢复、并发租约和事务回滚，以及原生 ChatDeepSeek SDK → Agent 工作流 → 服务 → 数据库的完整问答、追问、幂等重试和报告流程，结束后删除该测试 schema。未设置变量时这些用例明确跳过。模型测试使用可注入 transport 和确定性输出，不会调用真实 DeepSeek；真实模型效果、MinIO、Redis、语音/OCR、鉴权与用户隔离需单独验收。
+
+## 历史训练与复盘
+
+- `GET /api/interview-sessions?page=1&pageSize=10&status=completed`：按开始时间和 ID 倒序分页，`pageSize` 最大 50，`status` 可省略或为 `active`、`awaiting_finish`、`completed`。列表只返回岗位、时间、进度和报告分数等元数据。
+- `GET /api/interview-sessions/:id/review`：只读复盘数据，包括主问题、与主问题关联的追问、回答、全部评分证据和报告，不返回简历正文、JD、内部租约或请求 hash。
+- 历史浏览不替换正在进行的训练；只有点击“继续这场训练”才通过 `/training?sessionId=...` 切换。明确指定的记录不存在时显示错误，不会自动打开另一场面试。
+- 两个新接口按当前 MVP 的 `local-user` 过滤。这不是登录或生产级用户隔离；对外开放前仍需接入可信用户身份。
+
+## 真实模型验收
+
+在服务端配置 `DEEPSEEK_API_KEY` 后，在仓库根目录执行：
+
+```bash
+pnpm -F @interview-assistant/api eval:live
+```
+
+该命令读取 `apps/api/.env`（环境变量优先），顺序执行 7 个探针、8 次逻辑模型调用；每次调用仍可能触发现有的一次修复或备用模型降级，会产生真实模型费用。普通 `pnpm test` 会明确跳过真实模型测试。
+
+样例均为虚构数据，覆盖中文事实提取/岗位分析、四维核心出题、中英文好坏回答区分，以及只测一个维度时的提前结束报告。验收不连接业务数据库，也不写入训练记录。结果保存在被 Git 忽略的 `.cache/evals/*.json`，包含逐项结果、自动检查、输出、耗时、模型、降级状态及 provider 返回的 token 用量。失败也会落盘；依赖失败的探针标记为 skipped，不冒充通过。
+
+自动检查验证结构、引用证据和粗粒度评分区分，不能替代对提问相关性、反馈准确性、语言和计划可执行性的人工复核。单轮小样本不代表稳定的 P95 或总体效果；返回的 token 用量也不是完整计费审计。
 
 ## 目录结构
 

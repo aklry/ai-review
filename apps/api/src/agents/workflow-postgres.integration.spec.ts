@@ -375,6 +375,57 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
       expect(modelCalls).toBe(callsAfterReport);
       expect((await service.getReport(session.id)).overallScore).toBe(64);
       expect((await service.getSession(session.id)).status).toBe('completed');
+      const history = await service.listSessions({ page: 1, pageSize: 50, status: 'completed' });
+      expect(history.items.find((item) => item.id === session.id)).toMatchObject({
+        mainQuestionCount: 4,
+        answeredMainQuestionCount: 4,
+        followUpCount: 1,
+        report: { overallScore: 64, scoringVersion: 'evidence-v2' },
+      });
+      const review = await service.getSessionReview(session.id);
+      expect(review.questions).toHaveLength(5);
+      expect(review.questions.filter((q) => q.parentQuestionId)).toHaveLength(1);
+      expect(review.report?.cues).toHaveLength(4);
+      expect(review.report?.supplementalCues).toHaveLength(1);
+      expect(review.questions.every((q) => q.answer?.answerText === resumeText)).toBe(true);
+      expect(JSON.stringify(review)).not.toMatch(/requestHash|resumeText|turnLeaseToken/);
+      const foreignProfile = await prisma.candidateProfile.create({
+        data: { userKey: 'other-user', resumeText: 'A separate user profile.' },
+      });
+      const foreignJob = await prisma.job.create({
+        data: {
+          profileId: foreignProfile.id,
+          targetRole: 'Other user role',
+          description: 'Private job',
+        },
+      });
+      const foreignSession = await sessions.create(
+        {
+          profileId: foreignProfile.id,
+          jobId: foreignJob.id,
+          language: 'zh-CN',
+          round: 'technical',
+          difficulty: 'l2',
+          questionCount: 1,
+        },
+        [
+          {
+            id: 'foreign-q',
+            competency: 'project-depth',
+            difficulty: 'l2',
+            prompt: 'Private question',
+            isCore: true,
+          },
+        ],
+      );
+      expect(
+        (await service.listSessions({ page: 1, pageSize: 50 })).items.some(
+          (item) => item.id === foreignSession.id,
+        ),
+      ).toBe(false);
+      await expect(service.getSessionReview(foreignSession.id)).rejects.toMatchObject({
+        status: 404,
+      });
       expect(await prisma.interviewAnswer.count({ where: { sessionId: session.id } })).toBe(5);
       const usage = await prisma.usageLedger.findMany({
         where: { sessionId: session.id },

@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { storeToRefs } from 'pinia';
+import { useRouter } from 'vue-router';
+import { activateTrainingSelection } from '../lib/training-selection.js';
 import { useTrainingStore, type Phase } from '../stores/training.js';
 
 const resumeFileInput = ref<HTMLInputElement | null>(null);
+const props = defineProps<{ resumeSessionId?: string }>();
+const router = useRouter();
 
 const trainingStore = useTrainingStore();
 const {
@@ -11,6 +15,7 @@ const {
   loading,
   errorMessage,
   profileId,
+  sessionId,
   profileName,
   resumeText,
   resumeFileName,
@@ -107,8 +112,15 @@ function clearResumeUpload(): void {
 }
 
 onMounted(() => {
-  void trainingStore.activate();
+  void activateTrainingSelection(trainingStore, router, props.resumeSessionId);
 });
+
+watch(
+  () => props.resumeSessionId,
+  (id) => {
+    if (id) void activateTrainingSelection(trainingStore, router, id);
+  },
+);
 
 onBeforeUnmount(() => {
   trainingStore.deactivate();
@@ -517,6 +529,11 @@ function addStoryDraft(): void {
           </div>
           <p>{{ report.summary }}</p>
           <small>计分版本：{{ report.scoringVersion ?? 'legacy-v1' }}</small>
+          <p class="review-entry">
+            <el-link :href="`#/history/${encodeURIComponent(sessionId)}`" type="primary"
+              >查看逐题复盘</el-link
+            >
+          </p>
         </div>
         <div class="report-main">
           <div class="section-heading">

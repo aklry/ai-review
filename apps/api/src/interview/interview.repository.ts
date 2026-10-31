@@ -6,11 +6,13 @@ import type {
   JobAnalyzeInput,
   ProfileInput,
   StoryInput,
+  SessionHistoryQuery,
 } from '@interview-assistant/contracts';
 import { Prisma } from '../generated/prisma/client.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { SessionRepository, type TurnCommit } from './session.repository.js';
 import { toCue } from './cue-record.js';
+import { SessionHistoryRepository } from './session-history.repository.js';
 
 export type InterviewSessionRecord = {
   id: string;
@@ -59,6 +61,13 @@ export class InterviewRepository {
   private readonly sessions: SessionRepository;
   constructor(private readonly prisma: PrismaClient) {
     this.sessions = new SessionRepository(prisma);
+  }
+
+  listSessions(query: SessionHistoryQuery) {
+    return new SessionHistoryRepository(this.prisma).list(query);
+  }
+  getSessionReview(id: string) {
+    return new SessionHistoryRepository(this.prisma).review(id);
   }
 
   createWorkflowSession(input: InterviewSessionCreateInput, questions: InterviewQuestion[]) {

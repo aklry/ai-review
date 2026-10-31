@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createSSRApp } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { createPinia, setActivePinia } from 'pinia';
+import { createMemoryHistory, createRouter } from 'vue-router';
 import ElementPlus, { ID_INJECTION_KEY } from 'element-plus';
 import TrainingView from './TrainingView.vue';
 import { useTrainingStore } from '../stores/training.js';
@@ -41,6 +42,7 @@ describe('training view state', () => {
     const html = await renderToString(
       createSSRApp(TrainingView)
         .use(pinia)
+        .use(createRouter({ history: createMemoryHistory(), routes: [] }))
         .use(ElementPlus)
         .provide(ID_INJECTION_KEY, { prefix: 100, current: 0 }),
     );
@@ -84,6 +86,7 @@ describe('training view state', () => {
     const html = await renderToString(
       createSSRApp(TrainingView)
         .use(pinia)
+        .use(createRouter({ history: createMemoryHistory(), routes: [] }))
         .use(ElementPlus)
         .provide(ID_INJECTION_KEY, { prefix: 100, current: 0 }),
     );

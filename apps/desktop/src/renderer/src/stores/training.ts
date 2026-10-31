@@ -107,7 +107,7 @@ export const useTrainingStore = defineStore('training', () => {
   let pollHandle: ReturnType<typeof setTimeout> | null = null;
   let pollInFlight = false;
   let jobRequest: Promise<JobRecord> | null = null;
-  let sessionMutation: { sessionId: string; promise: Promise<unknown> } | null = null;
+  const sessionMutations = new Map<string, Promise<unknown>>();
 
   const answersComplete = computed(() => Boolean(session.value && !currentQuestion.value));
   const canSubmitAnswer = computed(() =>
@@ -260,13 +260,17 @@ export const useTrainingStore = defineStore('training', () => {
     phase.value = 'interview';
   }
 
-  async function activate(): Promise<void> {
-    if (active) return;
+  async function activate(requestedSessionId?: string): Promise<void> {
+    if (active) {
+      if (!requestedSessionId || requestedSessionId === sessionId.value) return;
+      deactivate();
+    }
+    if (requestedSessionId && requestedSessionId !== sessionId.value) restart();
     active = true;
     const requestGeneration = generation;
     const saved = readRecoveryIds();
-    const savedSessionId = sessionId.value || saved.sessionId;
-    const savedJobId = jobId.value || saved.jobId;
+    const savedSessionId = requestedSessionId || sessionId.value || saved.sessionId;
+    const savedJobId = requestedSessionId ? '' : jobId.value || saved.jobId;
     if (!savedSessionId && (phase.value !== 'setup' || !savedJobId)) {
       schedulePoll(0);
       return;
@@ -278,8 +282,9 @@ export const useTrainingStore = defineStore('training', () => {
       if (savedSessionId) {
         // A route remount must read after its outstanding write commits, rather
         // than restore an old cursor and discard the late mutation response.
-        if (sessionMutation?.sessionId === savedSessionId) {
-          await sessionMutation.promise.catch(() => undefined);
+        const pendingMutation = sessionMutations.get(savedSessionId);
+        if (pendingMutation) {
+          await pendingMutation.catch(() => undefined);
           if (!isCurrent(requestGeneration)) return;
         }
         let restored: SessionRecord | null = null;
@@ -292,6 +297,11 @@ export const useTrainingStore = defineStore('training', () => {
           session.value = null;
           currentQuestion.value = null;
           saveRecoveryIds({ jobId: savedJobId, sessionId: '' });
+          if (requestedSessionId) {
+            phase.value = 'setup';
+            errorMessage.value = '指定训练记录已不存在，请从历史记录重新选择';
+            return;
+          }
         }
         if (!isCurrent(requestGeneration)) return;
         if (restored) {
@@ -341,12 +351,12 @@ export const useTrainingStore = defineStore('training', () => {
   }
 
   async function mutateSession<T>(id: string, request: () => Promise<T>): Promise<T> {
-    const pending = { sessionId: id, promise: request() };
-    sessionMutation = pending;
+    const pending = request();
+    sessionMutations.set(id, pending);
     try {
-      return await pending.promise;
+      return await pending;
     } finally {
-      if (sessionMutation === pending) sessionMutation = null;
+      if (sessionMutations.get(id) === pending) sessionMutations.delete(id);
     }
   }
 
