@@ -11,6 +11,7 @@ import type {
   ProfileInput,
   ResumeDocumentSummary,
   StoryInput,
+  CoachingCue,
 } from '@interview-assistant/contracts';
 import { request, apiClient } from '../lib/http.js';
 import {
@@ -61,15 +62,7 @@ export type SessionRecord = {
 };
 
 export type CoachingResult = {
-  cue: {
-    competency: string;
-    score: number;
-    strengths: string[];
-    gaps: string[];
-    nextAction: string;
-    evidence: Array<{ source: string; quote: string }>;
-    followUpQuestion?: string;
-  };
+  cue: CoachingCue;
   nextQuestion: InterviewQuestion | null;
   currentQuestionIndex: number;
   activeQuestionId: string | null;

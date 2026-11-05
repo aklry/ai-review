@@ -9,6 +9,7 @@ import {
   type StoryInput,
 } from '@interview-assistant/contracts';
 import type { z } from 'zod';
+import { feedbackForAssessment } from './validation/feedback.js';
 
 const competencies: Competency[] = [
   'vue-react',
@@ -268,14 +269,20 @@ export function buildCoachingPrompt(input: {
     '只评估训练表现，不生成是否录用结论。',
     '不得编造简历事实；每条关键反馈必须引用简历、JD 或回答原文。',
     '请只输出一个 JSON 对象，结构必须符合 CoachingCue。',
-    '每个数组最多 2 项，每项不超过 80 个字；nextAction 不超过 120 个字；禁止输出额外解释，确保 JSON 完整闭合。',
+    'strengths、gaps、evidence 每个数组最多 2 项，每项不超过 80 个字；nextAction 不超过 120 个字；禁止输出额外解释，确保 JSON 完整闭合。',
+    input.currentQuestion.rubricSnapshot
+      ? '当前题目有评分标准：必须返回 rubricEvaluation，逐项覆盖全部评分标准；不要返回 score，程序会根据逐项评价计算分数。'
+      : '当前题目没有评分标准：必须返回 score，取值为 1–5 的整数；不要返回 rubricEvaluation。追问也按当前题目本身评分，不沿用之前题目的评分标准。',
+    '完成评分后，必须为当前这道题生成 referenceAnswer，追问也要针对当前追问生成。它是教学材料，不能作为用户回答证据或影响本次评分。使用用户指定的语言，中文建议 200–500 字，英文建议 120–240 词；给出完整回答正文 content 和 2–4 个 keyPoints，不要只重复改进建议。',
+    '技术或设计题使用 kind=example，解释核心机制、具体方案、取舍和验证，覆盖当前题目的约束与评分要点，接受多种有效解法；代码如有必要使用纯文本展示。',
+    '涉及个人经历的问题（尤其 project-depth）必须使用 kind=experience-template，写成针对当前问题的未填充回答模板。所有具体项目、背景、个人行动、决策、指标与结果都使用【待补充：具体事实】占位，即使用户已经提及也由用户自行核实填写；不要复制或扩写用户经历。用自然的连接语把占位串成完整回答，并在 missingFacts 列出需填事实，不能在占位之外断言任何成功结果。普通技术示例的 missingFacts 为空数组。',
     `会话：${input.sessionId}`,
     `语言：${input.language}`,
     `当前问题：${JSON.stringify(input.currentQuestion)}`,
     `用户回答：${input.answerText}`,
     `候选人档案摘要：${input.profileSummary}`,
     `岗位摘要：${input.jobSummary}`,
-    `之前反馈：${JSON.stringify(input.priorCues)}`,
+    `之前反馈：${JSON.stringify(input.priorCues.map(feedbackForAssessment))}`,
   ].join('\n');
 }
 
@@ -357,7 +364,7 @@ export function buildReportPrompt(input: {
     `语言：${input.language}`,
     `候选人档案摘要：${input.profileSummary}`,
     `岗位摘要：${input.jobSummary}`,
-    `本轮逐题反馈：${JSON.stringify(input.cues)}`,
+    `本轮逐题反馈：${JSON.stringify(input.cues.map(feedbackForAssessment))}`,
   ].join('\n');
 }
 
@@ -370,3 +377,6 @@ export * from './agents/interviewer-agent.js';
 export * from './agents/coach-agent.js';
 export * from './agents/report-agent.js';
 export * from './workflows/interview-workflows.js';
+export * from './question-bank/catalog.js';
+export * from './question-bank/selection.js';
+export * from './validation/rubric.js';

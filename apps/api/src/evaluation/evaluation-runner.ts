@@ -37,12 +37,17 @@ function message(error: unknown): string {
 
 export async function runEvaluation(
   probes: EvaluationProbe[],
-  options: { now?: () => number; onResult?: (result: EvaluationResult) => void } = {},
+  options: {
+    now?: () => number;
+    onResult?: (result: EvaluationResult) => void;
+    stopOnError?: (error: unknown) => string | undefined;
+  } = {},
 ) {
   const now = options.now ?? Date.now;
   const results: EvaluationResult[] = [];
+  let stopReason: string | undefined;
   for (const probe of probes) {
-    const reason = probe.skip?.();
+    const reason = stopReason ?? probe.skip?.();
     let result: EvaluationResult;
     if (reason) {
       result = {
@@ -66,6 +71,7 @@ export async function runEvaluation(
           output,
         };
       } catch (error) {
+        stopReason = options.stopOnError?.(error);
         result = {
           id: probe.id,
           title: probe.title,

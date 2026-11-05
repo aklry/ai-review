@@ -111,6 +111,7 @@ export class InterviewService implements OnApplicationBootstrap, OnModuleDestroy
         jobAnalysis: job.analysis,
         profileSummary: profile.resumeText,
         stories: profile.stories.map((story) => storyInputSchema.parse(story)),
+        standardQuestions: true,
       },
       { operationId: randomUUID() },
     );

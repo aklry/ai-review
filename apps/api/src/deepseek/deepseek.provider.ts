@@ -59,6 +59,16 @@ type DeepSeekProviderOptions = {
 
 export const DEFAULT_DEEPSEEK_TIMEOUT_MS = 120_000;
 
+export class ProviderHttpException extends BadGatewayException {
+  constructor(readonly providerStatus: number) {
+    super(`DeepSeek request failed with status ${providerStatus}`);
+  }
+}
+
+export function isProviderAccountError(error: unknown): error is ProviderHttpException {
+  return error instanceof ProviderHttpException && [401, 402, 403].includes(error.providerStatus);
+}
+
 type ChatCompletionPayload = {
   choices?: Array<{ message?: { content?: unknown } }>;
   model?: unknown;
@@ -120,6 +130,7 @@ export class DeepSeekProvider {
     try {
       return await this.generateWithModel(request, this.primaryModel, false, primaryDeadline);
     } catch (primaryError) {
+      if (isProviderAccountError(primaryError)) throw primaryError;
       const invalidOutput = primaryError instanceof InvalidModelOutputException;
       if (this.fallbackModel === this.primaryModel && !invalidOutput) {
         throw primaryError;
@@ -217,7 +228,7 @@ export class DeepSeekProvider {
         'status' in error &&
         typeof error.status === 'number'
       ) {
-        throw new BadGatewayException(`DeepSeek request failed with status ${error.status}`);
+        throw new ProviderHttpException(error.status);
       }
       if (error instanceof Error && error.message.startsWith('Invalid model output:')) {
         const detail = error.message.replace(/^Invalid model output:\s*/i, '');

@@ -94,6 +94,7 @@ export const useTrainingStore = defineStore('training', () => {
   const currentQuestionIndex = ref(0);
   const answerText = ref('');
   const latestCue = ref<CoachingResult['cue'] | null>(null);
+  const latestAnsweredQuestion = ref<InterviewQuestion | null>(null);
   const analysis = ref<JobAnalysis | null>(null);
   const analysisStatus = ref<JobRecord['analysisStatus']>('pending');
   const analysisError = ref<string | null>(null);
@@ -256,6 +257,7 @@ export const useTrainingStore = defineStore('training', () => {
         : null;
     answerText.value = '';
     latestCue.value = null;
+    latestAnsweredQuestion.value = null;
     modelState.value = null;
     phase.value = 'interview';
   }
@@ -364,7 +366,8 @@ export const useTrainingStore = defineStore('training', () => {
     if (!active || !canSubmitAnswer.value || !currentQuestion.value) return;
     const requestGeneration = generation;
     const requestedSessionId = sessionId.value;
-    const questionId = currentQuestion.value.id;
+    const answeredQuestion = currentQuestion.value;
+    const questionId = answeredQuestion.id;
     errorMessage.value = '';
     loading.value = true;
     try {
@@ -376,6 +379,7 @@ export const useTrainingStore = defineStore('training', () => {
       );
       if (!isCurrent(requestGeneration) || sessionId.value !== requestedSessionId) return;
       latestCue.value = result.cue;
+      latestAnsweredQuestion.value = answeredQuestion;
       modelState.value = { model: result.model, degraded: result.degraded };
       answerText.value = '';
       currentQuestionIndex.value = result.currentQuestionIndex;
@@ -570,6 +574,7 @@ export const useTrainingStore = defineStore('training', () => {
     currentQuestionIndex.value = 0;
     answerText.value = '';
     latestCue.value = null;
+    latestAnsweredQuestion.value = null;
     analysis.value = null;
     analysisStatus.value = 'pending';
     analysisError.value = null;
@@ -608,6 +613,7 @@ export const useTrainingStore = defineStore('training', () => {
     currentQuestionIndex,
     answerText,
     latestCue,
+    latestAnsweredQuestion,
     analysis,
     analysisStatus,
     analysisError,

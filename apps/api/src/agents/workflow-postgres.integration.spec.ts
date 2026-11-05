@@ -6,6 +6,7 @@ import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import { InterviewWorkflows, type AgentModelGateway } from '@interview-assistant/agent-core';
+import type { InterviewQuestion } from '@interview-assistant/contracts';
 import { PrismaClient } from '../generated/prisma/client.js';
 import { SessionRepository, type TurnCommit } from '../interview/session.repository.js';
 import { InterviewRepository } from '../interview/interview.repository.js';
@@ -25,6 +26,12 @@ const cue = {
   strengths: ['Ownership'],
   gaps: ['Validation'],
   nextAction: 'Explain validation.',
+  referenceAnswer: {
+    kind: 'experience-template' as const,
+    content: 'Describe [your actual validation steps] and compare the measured results.',
+    keyPoints: ['Explain validation and attribution'],
+    missingFacts: ['Actual validation steps'],
+  },
   evidence: [{ source: 'answer' as const, quote: 'reduced LCP' }],
 };
 
@@ -80,6 +87,10 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
     });
     expect(session.activeQuestionId).toBe('legacy-followup');
     expect(session.currentQuestionIndex).toBe(0);
+    expect(
+      (await prisma.interviewQuestion.findUniqueOrThrow({ where: { id: 'legacy-q1' } }))
+        .rubricSnapshot,
+    ).toBeNull();
     expect(
       (await prisma.interviewQuestion.findUniqueOrThrow({ where: { id: 'legacy-followup' } }))
         .parentQuestionId,
@@ -257,7 +268,6 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
         likelyQuestions: ['Describe a project'],
         missingEvidence: [],
       },
-      { questions },
       { ...cue, score: 2, followUpQuestion: 'How did you validate LCP?' },
       { question: { ...question, prompt: 'How did you validate LCP?', isCore: false } },
       { ...cue, score: 5 },
@@ -280,9 +290,34 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
       baseUrl: 'https://fixture.invalid/v1',
       primaryModel: 'fixture',
       fallbackModel: 'fixture',
-      transport: async () => {
-        const output = outputs.shift();
+      transport: async (_url, init) => {
+        const output = outputs.shift() as Record<string, unknown> | undefined;
         if (!output) throw new Error('Unexpected model call');
+        const request = JSON.parse(init.body) as { messages: Array<{ content: string }> };
+        const context = request.messages.at(-1)!.content;
+        const current = context.match(/当前问题：([^\n]+)/)?.[1];
+        if (current && typeof output.score === 'number') {
+          const q = JSON.parse(current) as InterviewQuestion;
+          output.competency = q.competency;
+          if (q.rubricSnapshot) {
+            const snapshot = q.rubricSnapshot;
+            const score = output.score;
+            output.rubricEvaluation = {
+              bankId: snapshot.bankId,
+              questionVersion: snapshot.questionVersion,
+              rubricVersion: snapshot.rubricVersion,
+              items: snapshot.criteria.map((criterion, i) => ({
+                criterionId: criterion.id,
+                status: i < score - 1 ? 'met' : 'missing',
+                reason: 'Fixture evidence assessment',
+                quotes: i < score - 1 ? ['reduced LCP'] : [],
+              })),
+            };
+          }
+        } else if (output.question) {
+          const q = (JSON.parse(context) as { currentQuestion: InterviewQuestion }).currentQuestion;
+          output.question = { ...(output.question as object), competency: q.competency };
+        }
         modelCalls += 1;
         return {
           ok: true,
@@ -333,6 +368,9 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
         questionCount: 4,
       });
       expect(session.questions).toHaveLength(4);
+      expect(session.questions.every((q) => q.rubricSnapshot?.rubricVersion === 'rubric-v3')).toBe(
+        true,
+      );
       expect(session.plan.job.targetRole).toBe('Frontend');
       const firstInput = { questionId: session.activeQuestionId!, answerText: resumeText };
       const first = await service.submitAnswer(session.id, firstInput);
@@ -362,10 +400,11 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
       expect(next.activeQuestionId).toBeNull();
       const restored = await service.getSession(session.id);
       expect(restored.questions).toHaveLength(5);
+      expect(restored.questions.every((q) => q.answer?.cue?.referenceAnswer)).toBe(true);
       expect(restored.questions[1]?.answer?.cue?.followUpQuestion).toBeNull();
       const report = await service.finishSession(session.id);
-      expect(report.scoringVersion).toBe('evidence-v2');
-      expect(report.overallScore).toBe(64);
+      expect(report.scoringVersion).toBe('rubric-v3');
+      expect(report.overallScore).toBe(76);
       expect(report.cues).toHaveLength(4);
       expect(report.supplementalCues).toHaveLength(1);
       expect(report.supplementalCues[0]?.score).toBe(5);
@@ -373,21 +412,33 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
       const callsAfterReport = modelCalls;
       expect((await service.finishSession(session.id)).id).toBe(report.id);
       expect(modelCalls).toBe(callsAfterReport);
-      expect((await service.getReport(session.id)).overallScore).toBe(64);
+      expect((await service.getReport(session.id)).overallScore).toBe(76);
       expect((await service.getSession(session.id)).status).toBe('completed');
       const history = await service.listSessions({ page: 1, pageSize: 50, status: 'completed' });
       expect(history.items.find((item) => item.id === session.id)).toMatchObject({
         mainQuestionCount: 4,
         answeredMainQuestionCount: 4,
         followUpCount: 1,
-        report: { overallScore: 64, scoringVersion: 'evidence-v2' },
+        report: { overallScore: 76, scoringVersion: 'rubric-v3' },
       });
       const review = await service.getSessionReview(session.id);
       expect(review.questions).toHaveLength(5);
       expect(review.questions.filter((q) => q.parentQuestionId)).toHaveLength(1);
       expect(review.report?.cues).toHaveLength(4);
+      expect(review.report?.cues.every((c) => c.rubricEvaluation?.items.length === 4)).toBe(true);
+      expect(
+        review.questions
+          .filter((q) => !q.parentQuestionId)
+          .every((q) => q.rubricSnapshot?.rubricVersion === 'rubric-v3'),
+      ).toBe(true);
       expect(review.report?.supplementalCues).toHaveLength(1);
       expect(review.questions.every((q) => q.answer?.answerText === resumeText)).toBe(true);
+      expect(
+        review.questions.every(
+          (q) =>
+            JSON.stringify(q.answer?.cue?.referenceAnswer) === JSON.stringify(cue.referenceAnswer),
+        ),
+      ).toBe(true);
       expect(JSON.stringify(review)).not.toMatch(/requestHash|resumeText|turnLeaseToken/);
       const foreignProfile = await prisma.candidateProfile.create({
         data: { userKey: 'other-user', resumeText: 'A separate user profile.' },
@@ -446,7 +497,7 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
         ),
       ).toBe(true);
       expect(outputs).toHaveLength(0);
-      expect(modelCalls).toBe(10);
+      expect(modelCalls).toBe(9);
     } finally {
       await service.onModuleDestroy();
     }

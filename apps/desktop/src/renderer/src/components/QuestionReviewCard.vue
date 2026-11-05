@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { SessionReview } from '@interview-assistant/contracts';
 import { competencyLabels, sourceLabels } from '../lib/interview-labels.js';
+import RubricFeedback from './RubricFeedback.vue';
+import ReferenceAnswer from './ReferenceAnswer.vue';
 defineProps<{ question: SessionReview['questions'][number]; label: string }>();
 </script>
 
@@ -26,6 +28,11 @@ defineProps<{ question: SessionReview['questions'][number]; label: string }>();
       <p class="section-label">我的回答</p>
       <p class="review-answer">{{ question.answer.answerText }}</p>
       <template v-if="question.answer.cue">
+        <RubricFeedback
+          v-if="question.answer.cue.rubricEvaluation"
+          :evaluation="question.answer.cue.rubricEvaluation"
+          :snapshot="question.rubricSnapshot"
+        />
         <div class="review-feedback-columns">
           <div>
             <h3>回答亮点</h3>
@@ -54,6 +61,11 @@ defineProps<{ question: SessionReview['questions'][number]; label: string }>();
             <p>{{ evidence.quote }}</p>
           </blockquote>
         </details>
+        <ReferenceAnswer
+          v-if="question.answer.cue.referenceAnswer"
+          :answer="question.answer.cue.referenceAnswer"
+        />
+        <p v-else class="history-muted">这条历史反馈未保存参考答案。</p>
       </template>
       <p v-else class="history-muted">这条历史回答没有保存反馈。</p>
     </template>

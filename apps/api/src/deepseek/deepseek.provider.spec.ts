@@ -35,6 +35,26 @@ function response(body: unknown, ok = true, status = 200) {
 }
 
 describe('DeepSeekProvider', () => {
+  it.each([401, 402, 403])('does not try another model for account error %i', async (status) => {
+    const transport = vi.fn(async () =>
+      response({ error: { message: 'Account unavailable' } }, false, status),
+    );
+    const provider = new DeepSeekProvider({
+      apiKey: 'fixture-key',
+      primaryModel: 'primary',
+      fallbackModel: 'fallback',
+      transport,
+    });
+    await expect(
+      provider.generateJson({
+        taskType: 'test',
+        schema: outputSchema,
+        systemPrompt: 'Return JSON.',
+        userPrompt: 'Hello',
+      }),
+    ).rejects.toMatchObject({ providerStatus: status });
+    expect(transport).toHaveBeenCalledOnce();
+  });
   it('disables SDK retries so one application attempt makes one HTTP request', async () => {
     const transport = vi.fn(async () =>
       response({ error: { message: 'unavailable' } }, false, 503),

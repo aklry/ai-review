@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { rubricSnapshotSchema, rubricEvaluationSchema } from './rubric.js';
+export * from './rubric.js';
 
 export const interviewModeSchema = z.enum(['preparation', 'simulation', 'authorized-assist']);
 export type InterviewMode = z.infer<typeof interviewModeSchema>;
@@ -155,6 +157,7 @@ export const questionSchema = z.object({
   prompt: z.string().trim().min(1),
   isCore: z.boolean(),
   parentQuestionId: z.string().min(1).nullable().optional(),
+  rubricSnapshot: rubricSnapshotSchema.nullish(),
 });
 export type InterviewQuestion = z.infer<typeof questionSchema>;
 
@@ -162,6 +165,14 @@ export const questionSetSchema = z.object({
   questions: z.array(questionSchema).min(1).max(12),
 });
 export type QuestionSet = z.infer<typeof questionSetSchema>;
+
+export const referenceAnswerSchema = z.object({
+  kind: z.enum(['example', 'experience-template']),
+  content: z.string().trim().min(1).max(5000),
+  keyPoints: z.array(z.string().trim().min(1).max(400)).min(1).max(6),
+  missingFacts: z.array(z.string().trim().min(1).max(300)).max(6),
+});
+export type ReferenceAnswer = z.infer<typeof referenceAnswerSchema>;
 
 export const coachingCueSchema = z.object({
   competency: competencySchema,
@@ -171,6 +182,9 @@ export const coachingCueSchema = z.object({
   nextAction: z.string().trim().min(1),
   evidence: z.array(evidenceSchema).min(1),
   followUpQuestion: z.string().trim().min(1).optional(),
+  rubricEvaluation: rubricEvaluationSchema.nullish(),
+  // Older persisted feedback and checkpoints do not contain an example answer.
+  referenceAnswer: referenceAnswerSchema.nullish(),
 });
 export type CoachingCue = z.infer<typeof coachingCueSchema>;
 
@@ -223,7 +237,7 @@ export const evaluationReportSchema = z.object({
   strengths: z.array(z.string().trim().min(1)),
   gaps: z.array(z.string().trim().min(1)),
   nextPlan: trainingPlanSchema,
-  scoringVersion: z.enum(['legacy-v1', 'evidence-v2']).optional(),
+  scoringVersion: z.enum(['legacy-v1', 'evidence-v2', 'rubric-v3']).optional(),
   assessmentStatus: z.enum(['complete', 'partial', 'unassessed']).optional(),
 });
 export type EvaluationReport = z.infer<typeof evaluationReportSchema>;
@@ -233,7 +247,7 @@ export const persistedReportSchema = evaluationReportSchema
   .extend({ nextPlan: z.array(trainingDaySchema).length(7) })
   .superRefine((report, context) => {
     if (
-      report.scoringVersion === 'evidence-v2' &&
+      (report.scoringVersion === 'evidence-v2' || report.scoringVersion === 'rubric-v3') &&
       new Set(report.nextPlan.map((day) => day.day)).size !== 7
     ) {
       context.addIssue({

@@ -14,5 +14,6 @@ coverage/
 *.db-shm
 *.db-wal
 apps/api/src/generated/
+apps/desktop/release/
 .DS_Store
 Thumbs.db

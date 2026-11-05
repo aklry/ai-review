@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { DeepSeekProvider } from '../deepseek/deepseek.provider.js';
+import { DeepSeekProvider, isProviderAccountError } from '../deepseek/deepseek.provider.js';
 import { EvaluationGateway, runEvaluation } from './evaluation-runner.js';
 import { createSyntheticEvaluation } from './synthetic-evaluation.js';
 
@@ -15,6 +15,10 @@ it.skipIf(process.env.RUN_LIVE_AGENT_EVAL !== '1')(
     const gateway = new EvaluationGateway(new DeepSeekProvider());
     const suite = createSyntheticEvaluation(gateway, `eval-${randomUUID()}`);
     const cases = await runEvaluation(suite.probes, {
+      stopOnError: (error) =>
+        isProviderAccountError(error)
+          ? `Stopped after provider account error ${error.providerStatus}; remaining probes were not requested.`
+          : undefined,
       onResult: (r) => console.info(`[live-eval] ${r.id}: ${r.status} (${r.elapsedMs}ms)`),
     });
     const qualityChecks = suite.qualityChecks();

@@ -391,6 +391,7 @@ describe('training store', () => {
 
     await store.sendAnswer();
     expect(store.currentQuestion).toBeNull();
+    expect(store.latestAnsweredQuestion?.id).toBe(question.id);
     expect(store.answerText).toBe('');
     expect(store.answersComplete).toBe(true);
     expect(store.canSubmitAnswer).toBe(false);
@@ -418,6 +419,7 @@ describe('training store', () => {
 
     expect(store.currentQuestionIndex).toBe(0);
     expect(store.currentQuestion?.id).toBe('follow_up');
+    expect(store.latestAnsweredQuestion?.id).toBe(question.id);
     expect(store.session?.activeQuestionId).toBe('follow_up');
     expect(store.baseQuestionCount).toBe(2);
   });

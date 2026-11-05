@@ -85,6 +85,7 @@ export class SessionHistoryRepository {
             difficulty: true,
             prompt: true,
             isCore: true,
+            rubricSnapshot: true,
             answer: { select: { id: true, answerText: true, createdAt: true, cue: true } },
           },
         },

@@ -1,8 +1,28 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EvaluationGateway, evaluateScorePair, runEvaluation } from './evaluation-runner.js';
 
 describe('model evaluation runner', () => {
+  it('preserves an account failure and skips remaining probes without additional calls', async () => {
+    const later = vi.fn(async () => ({ output: {}, checks: [] }));
+    const results = await runEvaluation(
+      [
+        {
+          id: 'first',
+          title: 'First',
+          run: async () => {
+            throw new Error('status 402');
+          },
+        },
+        { id: 'later', title: 'Later', run: later },
+      ],
+      { stopOnError: () => 'Account unavailable; not requested' },
+    );
+    expect(results.map((result) => result.status)).toEqual(['failed', 'skipped']);
+    expect(results[0]?.error).toBe('status 402');
+    expect(results[1]?.error).toBe('Account unavailable; not requested');
+    expect(later).not.toHaveBeenCalled();
+  });
   it('keeps failures and skipped dependencies while continuing independent probes', async () => {
     let tick = 0;
     const results = await runEvaluation(

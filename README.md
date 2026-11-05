@@ -62,6 +62,17 @@ API 初始化时执行 PostgreSQL checkpointer 的 `setup()`；数据库角色�
 
 桌面端开发窗口由 electron-vite 启动。API 服务读取 `apps/api/.env`。生产模型 API Key 只能放在服务端 Secret 管理系统中，不能写入 Electron 安装包或 renderer 代码。
 
+## 构建桌面安装包
+
+在 Windows 上从仓库根目录执行：
+
+```powershell
+pnpm -F @interview-assistant/desktop dist
+```
+
+生成的 NSIS 安装程序位于 `apps/desktop/release/`。如需生成未安装的目录版本用于检查，可执行
+`pnpm -F @interview-assistant/desktop dist:dir`，输出在 `apps/desktop/release/win-unpacked/`。
+
 ## 简历文件上传
 
 训练页的候选人档案默认使用文件上传：
@@ -139,6 +150,16 @@ pnpm -F @interview-assistant/api eval:live
 样例均为虚构数据，覆盖中文事实提取/岗位分析、四维核心出题、中英文好坏回答区分，以及只测一个维度时的提前结束报告。验收不连接业务数据库，也不写入训练记录。结果保存在被 Git 忽略的 `.cache/evals/*.json`，包含逐项结果、自动检查、输出、耗时、模型、降级状态及 provider 返回的 token 用量。失败也会落盘；依赖失败的探针标记为 skipped，不冒充通过。
 
 自动检查验证结构、引用证据和粗粒度评分区分，不能替代对提问相关性、反馈准确性、语言和计划可执行性的人工复核。单轮小样本不代表稳定的 P95 或总体效果；返回的 token 用量也不是完整计费审计。
+
+## 规范题与逐项评分（M1）
+
+逐题反馈现在包含参考答案：技术题提供示范解法，经历题提供带待补充事实的回答模板；即时反馈与历史复盘均可查看。旧反馈没有参考答案时保留原记录。部署时需执行新增迁移，详见 [参考答案实施记录](docs/superpowers/plans/2026-11-05-reference-answers.md)。
+
+新建训练从 24 个规范题主题选题，保存题目和评分标准快照。Coach 逐项判断证据，应用计算分数；即时反馈与历史复盘可查看满足项、缺失项和原文引用。新报告版本为 `rubric-v3`，历史报告不自动重算。
+
+运行新版 API 前，执行 `pnpm -F @interview-assistant/api prisma:generate` 和 `pnpm -F @interview-assistant/api exec prisma migrate deploy`。
+
+真实模型验收入口为 `pnpm -F @interview-assistant/api eval:rubric`，默认 20 次逻辑调用；`RUBRIC_EVAL_SCOPE=edges` 为 5 次，`full` 为 125 次，可能产生修复调用及费用。账户错误会停止后续探针。详见 [M1 实施记录](docs/superpowers/plans/2026-11-04-standard-question-rubrics.md)与[优化路线](docs/2026-11-04-product-improvement-roadmap.md)。
 
 ## 目录结构
 

@@ -43,6 +43,12 @@ const cue = {
   nextAction: 'Add validation',
   evidence: [{ source: 'answer', quote: 'LCP from 4.8s to 2.1s' }],
   followUpQuestion: 'How did you validate it?',
+  referenceAnswer: {
+    kind: 'experience-template' as const,
+    content: 'I validated [actual measurements].',
+    keyPoints: ['Explain the validation method.'],
+    missingFacts: ['Measurement method'],
+  },
 };
 
 function fakeModel(outputs: Record<string, unknown>) {
@@ -124,6 +130,8 @@ describe('agent workflows', () => {
     expect(result.scoringVersion).toBe('evidence-v2');
     expect(result.supplementalCues?.[0]?.score).toBe(5);
     expect(prompts[0]).toContain('Measured using field data');
+    expect(prompts[0]).not.toContain('actual measurements');
+    expect(prompts[0]).not.toContain('referenceAnswer');
   });
 
   it('reuses completed checkpoints and rejects reuse with different facts', async () => {

@@ -9,6 +9,7 @@ import type { InterviewQuestion } from '@interview-assistant/contracts';
 import { buildQuestionPrompt } from '../index.js';
 import type { AgentModelGateway } from './model-gateway.js';
 import { structuredAgent } from './structured-agent.js';
+import { feedbackForAssessment } from '../validation/feedback.js';
 
 export const questionAgentInputSchema = z.object({
   targetRole: z.string(),
@@ -20,6 +21,7 @@ export const questionAgentInputSchema = z.object({
   jobAnalysis: z.unknown(),
   profileSummary: z.string(),
   stories: z.array(storyInputSchema),
+  standardQuestions: z.boolean().optional(),
 });
 export type QuestionAgentInput = z.infer<typeof questionAgentInputSchema>;
 export const followUpInputSchema = z.object({
@@ -58,7 +60,7 @@ export class InterviewerAgent {
       maxOutputTokens: 600,
       instructions:
         'Generate exactly one concise follow-up clarifying the candidate actual answer. Keep the current competency and difficulty. isCore must be false. The application controls progression; never request another follow-up.',
-      context: (input) => JSON.stringify(input),
+      context: (input) => JSON.stringify({ ...input, cue: feedbackForAssessment(input.cue) }),
       validate: (output, input) => {
         if (output.question.competency !== input.currentQuestion.competency)
           throw new Error('Follow-up competency changed');

@@ -16,6 +16,7 @@ import { InterviewerAgent, type QuestionAgentInput } from '../agents/interviewer
 import { CoachAgent, type CoachAgentInput } from '../agents/coach-agent.js';
 import { ReportAgent } from '../agents/report-agent.js';
 import type { AgentModelGateway } from '../agents/model-gateway.js';
+import { selectStandardQuestions } from '../question-bank/selection.js';
 
 export type PreparationInput = JobAgentInput & { cachedProfile?: StructuredProfile };
 export type WorkflowRun = { operationId: string; sessionId?: string };
@@ -82,7 +83,12 @@ export class InterviewWorkflows {
       .compile(compile);
     this.questionGeneration = new StateGraph(QuestionState)
       .addNode('interviewer', async (state, config) => ({
-        questions: (await interviewer.invoke(state.input, config)).data.questions,
+        questions: state.input.standardQuestions
+          ? selectStandardQuestions(
+              state.input,
+              String(config?.configurable?.thread_id ?? 'initial'),
+            )
+          : (await interviewer.invoke(state.input, config)).data.questions,
       }))
       .addEdge(START, 'interviewer')
       .addEdge('interviewer', END)
@@ -110,6 +116,7 @@ export class InterviewWorkflows {
             competency: state.input.currentQuestion.competency,
             difficulty: state.input.currentQuestion.difficulty,
             isCore: false,
+            rubricSnapshot: null,
           },
           degraded: state.degraded || result.degraded,
         };
@@ -137,7 +144,10 @@ export class InterviewWorkflows {
             supplementalCues: state.input.supplementalCues ?? [],
             competencyScores: state.scores,
             overallScore: calculateWeightedScore(state.scores),
-            scoringVersion: 'evidence-v2',
+            scoringVersion:
+              state.input.cues.length > 0 && state.input.cues.every((cue) => cue.rubricEvaluation)
+                ? 'rubric-v3'
+                : 'evidence-v2',
             assessmentStatus:
               measured === 4 ? 'complete' : measured === 0 ? 'unassessed' : 'partial',
           }),

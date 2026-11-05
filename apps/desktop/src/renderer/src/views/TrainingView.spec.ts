@@ -19,6 +19,50 @@ describe('training view state', () => {
     useTrainingStore().$dispose();
   });
 
+  it('shows a reference answer for the submitted question alongside the next question', async () => {
+    const store = useTrainingStore();
+    store.phase = 'interview';
+    store.latestAnsweredQuestion = {
+      id: 'previous',
+      competency: 'vue-react',
+      difficulty: 'l2',
+      prompt: '解释请求乱序',
+      isCore: true,
+    };
+    store.currentQuestion = {
+      id: 'next',
+      competency: 'vue-react',
+      difficulty: 'l2',
+      prompt: '如何验证取消请求',
+      isCore: false,
+    };
+    store.latestCue = {
+      competency: 'vue-react',
+      score: 2,
+      strengths: [],
+      gaps: [],
+      nextAction: '补充验证',
+      evidence: [{ source: 'answer', quote: '版本号' }],
+      referenceAnswer: {
+        kind: 'example',
+        content: '给每次查询分配递增版本号，仅允许当前版本更新状态。',
+        keyPoints: ['隔离过期响应'],
+        missingFacts: [],
+      },
+    };
+    const html = await renderToString(
+      createSSRApp(TrainingView)
+        .use(pinia)
+        .use(createRouter({ history: createMemoryHistory(), routes: [] }))
+        .use(ElementPlus)
+        .provide(ID_INJECTION_KEY, { prefix: 100, current: 0 }),
+    );
+    expect(html).toContain('刚刚回答：</strong>解释请求乱序');
+    expect(html).toContain('如何验证取消请求');
+    expect(html).toContain('本题参考答案');
+    expect(html).toContain('仅允许当前版本更新状态');
+  });
+
   it('shows unanswered dimensions and total as 未测评 without rendering zero score bars', async () => {
     const store = useTrainingStore();
     store.phase = 'report';

@@ -4,6 +4,8 @@ import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import { activateTrainingSelection } from '../lib/training-selection.js';
 import { useTrainingStore, type Phase } from '../stores/training.js';
+import RubricFeedback from '../components/RubricFeedback.vue';
+import ReferenceAnswer from '../components/ReferenceAnswer.vue';
 
 const resumeFileInput = ref<HTMLInputElement | null>(null);
 const props = defineProps<{ resumeSessionId?: string }>();
@@ -36,6 +38,7 @@ const {
   currentQuestionIndex,
   answerText,
   latestCue,
+  latestAnsweredQuestion,
   analysis,
   analysisStatus,
   report,
@@ -494,8 +497,16 @@ function addStoryDraft(): void {
             </el-tag>
           </div>
           <template v-if="latestCue">
+            <p v-if="latestAnsweredQuestion" class="feedback-question">
+              <strong>刚刚回答：</strong>{{ latestAnsweredQuestion.prompt }}
+            </p>
             <div class="score-ring">{{ latestCue.score }}<small>/5</small></div>
             <p class="feedback-action">{{ latestCue.nextAction }}</p>
+            <RubricFeedback
+              v-if="latestCue.rubricEvaluation"
+              :evaluation="latestCue.rubricEvaluation"
+              :snapshot="latestAnsweredQuestion?.rubricSnapshot"
+            />
             <div class="feedback-section">
               <strong>做得好</strong>
               <ul>
@@ -513,6 +524,8 @@ function addStoryDraft(): void {
               <p>“{{ latestCue.evidence[0]?.quote }}”</p>
             </div>
             <small v-if="modelState">{{ modelState.model }}</small>
+            <ReferenceAnswer v-if="latestCue.referenceAnswer" :answer="latestCue.referenceAnswer" />
+            <p v-else class="history-muted">这条反馈未保存参考答案。</p>
           </template>
           <el-empty v-else description="提交第一题后查看反馈" :image-size="72" />
         </aside>

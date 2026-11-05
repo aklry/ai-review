@@ -139,6 +139,7 @@ model InterviewQuestion {
   prompt           String
   isCore           Boolean
   parentQuestionId String?
+  rubricSnapshot   Json?
   createdAt        DateTime @default(now())
 
   session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -175,6 +176,8 @@ model CoachingCue {
   gaps             String[]
   nextAction       String
   evidence         Json
+  rubricEvaluation Json?
+  referenceAnswer  Json?
   followUpQuestion String?
   createdAt        DateTime @default(now())
 

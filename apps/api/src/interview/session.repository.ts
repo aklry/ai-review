@@ -60,6 +60,9 @@ export class SessionRepository {
           prompt: q.prompt,
           isCore: q.isCore,
           parentQuestionId: null,
+          ...(q.rubricSnapshot
+            ? { rubricSnapshot: q.rubricSnapshot as Prisma.InputJsonValue }
+            : {}),
         })),
       });
       const activeQuestionId = persisted[0]?.id ?? null;
@@ -160,6 +163,12 @@ export class SessionRepository {
           gaps: input.cue.gaps,
           nextAction: input.cue.nextAction,
           evidence: input.cue.evidence as Prisma.InputJsonValue,
+          ...(input.cue.referenceAnswer
+            ? { referenceAnswer: input.cue.referenceAnswer as Prisma.InputJsonValue }
+            : {}),
+          ...(input.cue.rubricEvaluation
+            ? { rubricEvaluation: input.cue.rubricEvaluation as Prisma.InputJsonValue }
+            : {}),
           ...(input.cue.followUpQuestion ? { followUpQuestion: input.cue.followUpQuestion } : {}),
         },
       });
