@@ -22,7 +22,7 @@ const activeRoute = computed(() => (route.path.startsWith('/history') ? '/histor
         <el-menu-item index="/history">历史训练</el-menu-item>
       </el-menu>
     </el-aside>
-    <el-container>
+    <el-container class="content-layout">
       <el-main class="main-content">
         <RouterView />
       </el-main>
