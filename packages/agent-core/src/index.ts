@@ -380,3 +380,4 @@ export * from './workflows/interview-workflows.js';
 export * from './question-bank/catalog.js';
 export * from './question-bank/selection.js';
 export * from './validation/rubric.js';
+export * from './question-bank/practice.js';

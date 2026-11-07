@@ -7,6 +7,7 @@ import {
   storyInputSchema,
   sessionHistoryQuerySchema,
 } from '@interview-assistant/contracts';
+import { z } from 'zod';
 import { InterviewService } from './interview.service.js';
 
 @Controller()
@@ -49,8 +50,30 @@ export class InterviewController {
   }
 
   @Post('interview-sessions/:id/answers')
-  submitAnswer(@Param('id') sessionId: string, @Body() body: unknown) {
-    return this.interviewService.submitAnswer(sessionId, answerSubmitInputSchema.parse(body));
+  async submitAnswer(@Param('id') sessionId: string, @Body() body: unknown) {
+    const turn = await this.interviewService.submitAnswer(
+      sessionId,
+      answerSubmitInputSchema.parse(body),
+    );
+    return turn.feedbackPolicy === 'deferred'
+      ? {
+          ...turn,
+          cue: null,
+          nextQuestion: turn.nextQuestion ? { ...turn.nextQuestion, rubricSnapshot: null } : null,
+        }
+      : turn;
+  }
+
+  @Post('interview-sessions/:id/control')
+  control(@Param('id') id: string, @Body() body: unknown) {
+    const { action, questionId, version } = z
+      .object({
+        action: z.enum(['skip', 'pause', 'resume']),
+        questionId: z.string().min(1),
+        version: z.number().int().nonnegative(),
+      })
+      .parse(body);
+    return this.interviewService.control(id, action, questionId, version);
   }
 
   @Post('interview-sessions/:id/finish')

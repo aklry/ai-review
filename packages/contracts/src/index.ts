@@ -188,7 +188,10 @@ export const coachingCueSchema = z.object({
 });
 export type CoachingCue = z.infer<typeof coachingCueSchema>;
 
+export const feedbackPolicySchema = z.enum(['immediate', 'deferred']);
 export const interviewSessionCreateInputSchema = z.object({
+  feedbackPolicy: feedbackPolicySchema.optional(),
+  timeLimitMinutes: z.number().int().min(1).max(180).optional(),
   profileId: z.string().trim().min(1),
   jobId: z.string().trim().min(1),
   language: interviewLanguageSchema,
@@ -296,9 +299,13 @@ export const sessionHistoryPageSchema = z.object({
 export type SessionHistoryPage = z.infer<typeof sessionHistoryPageSchema>;
 
 export const sessionReviewSchema = sessionHistoryItemSchema.extend({
+  feedbackPolicy: feedbackPolicySchema.optional(),
   activeQuestionId: z.string().nullable(),
   questions: z.array(
     questionSchema.extend({
+      skippedAt: z.string().datetime().nullish(),
+      dispute: z.string().nullish(),
+      referenceViewedAt: z.string().datetime().nullish(),
       answer: z
         .object({
           answerText: z.string(),
@@ -359,3 +366,21 @@ export type ApiResponse<T> = {
   requestId: string;
   timestamp: string;
 };
+
+export const practiceAttemptSchema = z.object({
+  prompt: z.string(),
+  answerText: z.string(),
+  cue: coachingCueSchema,
+});
+export const practiceTaskSchema = z.object({
+  id: z.string(),
+  sourceQuestionId: z.string(),
+  criterionId: z.string(),
+  snapshot: rubricSnapshotSchema,
+  original: practiceAttemptSchema,
+  attempts: z.array(practiceAttemptSchema),
+  stage: z.number().int().min(0).max(3),
+  prompt: z.string().nullable(),
+  freshRetest: z.boolean(),
+});
+export type PracticeTaskView = z.infer<typeof practiceTaskSchema>;

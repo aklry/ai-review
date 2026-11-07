@@ -64,8 +64,67 @@ export class InterviewService implements OnApplicationBootstrap, OnModuleDestroy
   getJob(id: string) {
     return this.repository.getJob(id);
   }
-  getSession(id: string) {
-    return this.repository.getSession(id);
+  async getSession(id: string) {
+    const session = await this.repository.getSession(id);
+    if (session.feedbackPolicy !== 'deferred' || session.status === 'completed') return session;
+    return {
+      ...session,
+      cues: [],
+      report: null,
+      questions: session.questions.map((q) => ({
+        ...q,
+        rubricSnapshot: null,
+        answer: q.answer ? { answerText: q.answer.answerText, cue: null } : null,
+      })),
+    };
+  }
+
+  async control(
+    id: string,
+    action: 'skip' | 'pause' | 'resume',
+    questionId: string,
+    version: number,
+  ) {
+    const session = await this.repository.getSession(id);
+    if (
+      session.activeQuestionId !== questionId ||
+      session.version !== version ||
+      session.status !== 'active'
+    )
+      throw new ConflictException('当前题目已更新，请重新进入');
+    await this.withLease(session, async (token) => {
+      if (action === 'skip') {
+        if (session.pausedAt) throw new ConflictException('请先继续面试');
+        const current = session.questions.find((q) => q.id === questionId)!;
+        const next = planNextTurn(session.questions, current, null);
+        if (
+          !next.nextQuestion &&
+          !session.questions.some((q) => !q.parentQuestionId && q.answer?.cue)
+        )
+          throw new BadRequestException('至少回答一道主问题才能生成报告');
+        await this.repository.controlSession(
+          session,
+          token,
+          {
+            status: next.status,
+            currentQuestionIndex: next.currentQuestionIndex,
+            activeQuestionId: next.nextQuestion?.id ?? null,
+          },
+          questionId,
+        );
+      } else if (action === 'pause' && !session.pausedAt) {
+        await this.repository.controlSession(session, token, { pausedAt: new Date() });
+      } else if (action === 'resume' && session.pausedAt) {
+        const pausedMs = Date.now() - session.pausedAt.getTime();
+        await this.repository.controlSession(session, token, {
+          pausedAt: null,
+          ...(session.deadlineAt
+            ? { deadlineAt: new Date(session.deadlineAt.getTime() + pausedMs) }
+            : {}),
+        });
+      }
+    });
+    return this.getSession(id);
   }
   getReport(id: string) {
     return this.repository.getReport(id);
@@ -112,11 +171,13 @@ export class InterviewService implements OnApplicationBootstrap, OnModuleDestroy
         profileSummary: profile.resumeText,
         stories: profile.stories.map((story) => storyInputSchema.parse(story)),
         standardQuestions: true,
+        jobDescription: job.description,
+        recentTopics: await this.repository.recentTopics(input.profileId),
       },
       { operationId: randomUUID() },
     );
     const created = await this.repository.createWorkflowSession(input, questions);
-    return this.repository.getSession(created.id);
+    return this.getSession(created.id);
   }
 
   async submitAnswer(sessionId: string, input: AnswerSubmitInput): Promise<TurnResponse> {
@@ -130,7 +191,7 @@ export class InterviewService implements OnApplicationBootstrap, OnModuleDestroy
         return question.answer.result as TurnResponse;
       throw new ConflictException('This answer is already submitted; reload the session');
     }
-    if (session.status !== 'active' || session.activeQuestionId !== question.id)
+    if (session.status !== 'active' || session.pausedAt || session.activeQuestionId !== question.id)
       throw new ConflictException('This is not the active question');
     return this.withLease(session, async (token) => {
       const result = await this.runtime.workflows.coach(
@@ -148,9 +209,18 @@ export class InterviewService implements OnApplicationBootstrap, OnModuleDestroy
       const cue = { ...result.cue };
       delete cue.followUpQuestion;
       if (result.followUp) cue.followUpQuestion = result.followUp.prompt;
-      const next = planNextTurn(session.questions, question, result.followUp);
+      const expired = session.deadlineAt && session.deadlineAt.getTime() <= Date.now();
+      const next = expired
+        ? {
+            nextQuestion: null,
+            status: 'awaiting_finish',
+            currentQuestionIndex: session.currentQuestionIndex + 1,
+          }
+        : planNextTurn(session.questions, question, result.followUp);
+      if (expired) delete cue.followUpQuestion;
       const response: TurnResponse = {
         cue,
+        ...(session.feedbackPolicy === 'deferred' ? { feedbackPolicy: 'deferred' } : {}),
         nextQuestion: next.nextQuestion,
         currentQuestionIndex: next.currentQuestionIndex,
         status: next.status,
@@ -194,8 +264,9 @@ export class InterviewService implements OnApplicationBootstrap, OnModuleDestroy
           jobSummary: session.plan.job.description,
           cues,
           supplementalCues,
+          feedbackPolicy: session.feedbackPolicy === 'deferred' ? 'deferred' : 'immediate',
         },
-        { operationId: `${sessionId}:${session.version}:evidence-v2`, sessionId },
+        { operationId: `${sessionId}:${session.version}:report-training-v1`, sessionId },
       );
       return this.repository.finishWorkflowSession(sessionId, report, session.version, token);
     });

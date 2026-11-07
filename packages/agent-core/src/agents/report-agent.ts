@@ -14,6 +14,7 @@ export const reportAgentInputSchema = z.object({
   profileSummary: z.string(),
   jobSummary: z.string(),
   cues: z.array(coachingCueSchema),
+  feedbackPolicy: z.enum(['immediate', 'deferred']).optional(),
   supplementalCues: z.array(coachingCueSchema).default([]),
   competencyScores: competencyScoresSchema,
 });
@@ -30,7 +31,7 @@ export class ReportAgent {
       output: reportNarrativeSchema,
       maxOutputTokens: 3000,
       instructions:
-        'Summarize verified interview feedback in the requested language. Do not assign or alter scores. supplementalCues contain linked follow-up evidence: use them to qualify narrative gaps and strengths without treating them as separately scored questions. Null competencies are unassessed, not weaknesses or passing grades. Separate facts from advice. Return an actionable plan with each day 1 through 7 exactly once. Never invent candidate experience.',
+        'Summarize verified interview feedback in the requested language. Do not assign or alter scores. supplementalCues contain linked follow-up evidence: use them to qualify narrative gaps and strengths without treating them as separately scored questions. When feedbackPolicy is immediate, follow-up answers came after coaching and cannot establish independent mastery. Null competencies are unassessed, not weaknesses or passing grades. Separate facts from advice. Return an actionable plan with each day 1 through 7 exactly once. Never invent candidate experience.',
       context: (input) =>
         JSON.stringify({
           ...input,

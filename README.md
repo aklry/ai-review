@@ -159,7 +159,9 @@ pnpm -F @interview-assistant/api eval:live
 
 运行新版 API 前，执行 `pnpm -F @interview-assistant/api prisma:generate` 和 `pnpm -F @interview-assistant/api exec prisma migrate deploy`。
 
-真实模型验收入口为 `pnpm -F @interview-assistant/api eval:rubric`，默认 20 次逻辑调用；`RUBRIC_EVAL_SCOPE=edges` 为 5 次，`full` 为 125 次，可能产生修复调用及费用。账户错误会停止后续探针。详见 [M1 实施记录](docs/superpowers/plans/2026-11-04-standard-question-rubrics.md)与[优化路线](docs/2026-11-04-product-improvement-roadmap.md)。
+真实模型验收入口为 `pnpm -F @interview-assistant/api eval:rubric`，默认 20 次逻辑调用；`RUBRIC_EVAL_SCOPE=edges` 为 7 次，`full` 为 127 次，可能产生修复调用及费用。账户错误会停止后续探针。详见 [M1 实施记录](docs/superpowers/plans/2026-11-04-standard-question-rubrics.md)与[优化路线](docs/2026-11-04-product-improvement-roadmap.md)。
+
+面试模式、专项练习、语音和本轮验收见 [面试训练迭代执行单](docs/2026-11-07-interview-training.md)。
 
 ## 目录结构
 

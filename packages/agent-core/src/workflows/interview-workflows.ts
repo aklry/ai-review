@@ -27,6 +27,7 @@ export type ReportInput = {
   jobSummary: string;
   cues: CoachingCue[];
   supplementalCues?: CoachingCue[];
+  feedbackPolicy?: 'immediate' | 'deferred';
 };
 
 const PreparationState = Annotation.Root({
@@ -99,6 +100,20 @@ export class InterviewWorkflows {
         return { cue: result.data, followUp: null, model: result.model, degraded: result.degraded };
       })
       .addNode('askFollowUp', async (state, config) => {
+        const question = state.input.currentQuestion;
+        if (question.rubricSnapshot && state.cue.followUpQuestion) {
+          return {
+            followUp: {
+              id: 'followup-' + question.id,
+              parentQuestionId: question.id,
+              prompt: state.cue.followUpQuestion,
+              competency: question.competency,
+              difficulty: question.difficulty,
+              isCore: false,
+              rubricSnapshot: null,
+            },
+          };
+        }
         const result = await interviewer.followUp.invoke(
           {
             currentQuestion: state.input.currentQuestion,
@@ -123,7 +138,9 @@ export class InterviewWorkflows {
       })
       .addEdge(START, 'coach')
       .addConditionalEdges('coach', (state) =>
-        !state.input.currentQuestion.parentQuestionId && state.cue.followUpQuestion
+        state.input.allowFollowUp !== false &&
+        !state.input.currentQuestion.parentQuestionId &&
+        state.cue.followUpQuestion
           ? 'askFollowUp'
           : END,
       )

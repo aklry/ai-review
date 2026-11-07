@@ -1,4 +1,5 @@
-import { app, BrowserWindow } from 'electron';
+import { transcribeWav } from './speech.js';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import { fileURLToPath } from 'node:url';
 import {
   configureElectronRuntime,
@@ -70,6 +71,19 @@ function getErrorMessage(error: unknown): string {
 }
 
 app.whenReady().then(() => {
+  ipcMain.handle('speech:transcribe', (event, bytes: Uint8Array, language: string) => {
+    const frame = event.senderFrame;
+    if (!frame || frame !== event.sender.mainFrame || !BrowserWindow.fromWebContents(event.sender))
+      throw new Error('无效的录音窗口');
+    const location = new URL(frame.url);
+    if (
+      rendererUrl
+        ? location.origin !== new URL(rendererUrl).origin
+        : location.protocol !== 'file:' || fileURLToPath(location) !== rendererPath
+    )
+      throw new Error('无效的录音来源');
+    return transcribeWav(bytes, language);
+  });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -7,9 +7,12 @@ import { InterviewRepository } from './interview.repository.js';
 import { InterviewService } from './interview.service.js';
 import { WorkflowRuntime } from '../agents/workflow-runtime.service.js';
 
+import { PracticeService } from './practice.service.js';
+import { PracticeController } from './practice.controller.js';
+
 @Module({
   imports: [PrismaModule],
-  controllers: [InterviewController],
+  controllers: [InterviewController, PracticeController],
   providers: [
     {
       provide: DeepSeekProvider,
@@ -20,6 +23,7 @@ import { WorkflowRuntime } from '../agents/workflow-runtime.service.js';
       useFactory: (prisma: PrismaService) => new InterviewRepository(prisma),
       inject: [PrismaService],
     },
+    PracticeService,
     InterviewService,
     WorkflowRuntime,
   ],

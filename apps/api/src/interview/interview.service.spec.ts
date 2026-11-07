@@ -57,6 +57,7 @@ function setup(overrides: Partial<InterviewSessionRecord> = {}) {
     ...overrides,
   };
   const repository = {
+    recentTopics: vi.fn(async () => []),
     getProfile: vi.fn(async () => ({
       id: 'p1',
       resumeText: 'A frontend engineer with project delivery experience.',

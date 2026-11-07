@@ -22,6 +22,8 @@ export const questionAgentInputSchema = z.object({
   profileSummary: z.string(),
   stories: z.array(storyInputSchema),
   standardQuestions: z.boolean().optional(),
+  jobDescription: z.string().optional(),
+  recentTopics: z.array(z.object({ id: z.string(), score: z.number().nullable() })).optional(),
 });
 export type QuestionAgentInput = z.infer<typeof questionAgentInputSchema>;
 export const followUpInputSchema = z.object({
@@ -59,7 +61,7 @@ export class InterviewerAgent {
       output: z.object({ question: questionSchema }),
       maxOutputTokens: 600,
       instructions:
-        'Generate exactly one concise follow-up clarifying the candidate actual answer. Keep the current competency and difficulty. isCore must be false. The application controls progression; never request another follow-up.',
+        'Generate one concise follow-up grounded in the actual answer. Use the criterion judgments: clarify ambiguous ownership, ask for a concrete validation or counterexample when the conclusion is unsupported, or add a constraint to deepen an already justified choice. Ask only one thing and do not reveal the missing answer. Keep the current competency and difficulty. isCore must be false. The application controls progression; never request another follow-up.',
       context: (input) => JSON.stringify({ ...input, cue: feedbackForAssessment(input.cue) }),
       validate: (output, input) => {
         if (output.question.competency !== input.currentQuestion.competency)

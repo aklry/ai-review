@@ -74,6 +74,7 @@ export class SessionHistoryRepository {
       where: { id, plan: { profile: { userKey: 'local-user' } } },
       select: {
         ...metadata,
+        feedbackPolicy: true,
         activeQuestionId: true,
         report: true,
         questions: {
@@ -86,19 +87,27 @@ export class SessionHistoryRepository {
             prompt: true,
             isCore: true,
             rubricSnapshot: true,
+            skippedAt: true,
             answer: { select: { id: true, answerText: true, createdAt: true, cue: true } },
           },
         },
       },
     });
     if (!row) throw new NotFoundException('Interview session not found');
+    const deferred = row.feedbackPolicy === 'deferred' && row.status !== 'completed';
     const questions = row.questions.map((q) => ({
       ...q,
+      rubricSnapshot: deferred ? null : q.rubricSnapshot,
+      skippedAt: q.skippedAt?.toISOString() ?? null,
+      referenceViewedAt: deferred
+        ? null
+        : (q.answer?.cue?.referenceViewedAt?.toISOString() ?? null),
+      dispute: deferred ? null : (q.answer?.cue?.dispute ?? null),
       answer: q.answer
         ? {
             answerText: q.answer.answerText,
             createdAt: q.answer.createdAt.toISOString(),
-            cue: q.answer.cue ? toCue(q.answer.cue) : null,
+            cue: !deferred && q.answer.cue ? toCue(q.answer.cue) : null,
           }
         : null,
     }));
@@ -116,6 +125,7 @@ export class SessionHistoryRepository {
     return sessionReviewSchema.parse({
       ...summary(row),
       activeQuestionId: row.activeQuestionId,
+      feedbackPolicy: row.feedbackPolicy,
       questions,
       report: row.report
         ? persistedReportSchema.parse({

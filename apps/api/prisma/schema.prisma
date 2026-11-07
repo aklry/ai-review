@@ -110,6 +110,9 @@ model InterviewPlan {
 model InterviewSession {
   id                   String    @id @default(cuid())
   planId               String
+  feedbackPolicy       String    @default("immediate")
+  deadlineAt           DateTime?
+  pausedAt             DateTime?
   mode                 String    @default("simulation")
   status               String    @default("active")
   currentQuestionIndex Int       @default(0)
@@ -139,6 +142,8 @@ model InterviewQuestion {
   prompt           String
   isCore           Boolean
   parentQuestionId String?
+  practiceTasks    PracticeTask[]
+  skippedAt        DateTime?
   rubricSnapshot   Json?
   createdAt        DateTime @default(now())
 
@@ -177,6 +182,8 @@ model CoachingCue {
   nextAction       String
   evidence         Json
   rubricEvaluation Json?
+  referenceViewedAt DateTime?
+  dispute          String?
   referenceAnswer  Json?
   followUpQuestion String?
   createdAt        DateTime @default(now())
@@ -221,4 +228,18 @@ model UsageLedger {
 
   @@index([userKey, createdAt])
   @@index([sessionId])
+}
+
+model PracticeTask {
+  id               String @id @default(cuid())
+  sourceQuestionId String
+  criterionId      String
+  questions        Json
+  attempts         Json @default("[]")
+  stage            Int @default(0)
+  freshKey         String? @unique
+  leaseToken       String?
+  leaseUntil       DateTime?
+  source           InterviewQuestion @relation(fields: [sourceQuestionId], references: [id], onDelete: Cascade)
+  @@unique([sourceQuestionId, criterionId])
 }

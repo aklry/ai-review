@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
 import { useHistoryStore } from '../stores/history.js';
+import PracticeLinks from '../components/PracticeLinks.vue';
 import QuestionReviewCard from '../components/QuestionReviewCard.vue';
 import {
   competencyLabels,
@@ -150,14 +151,26 @@ onBeforeUnmount(history.cancelReview);
         </article>
       </section>
       <p v-else class="history-muted">这场训练尚未生成报告，已保存的问答和反馈仍可逐题查看。</p>
+      <PracticeLinks :session-id="review.id" :review="review" />
       <div class="history-list" aria-label="完整问答与反馈">
         <section v-for="group in groups" :key="group.question.id" class="question-group">
-          <QuestionReviewCard :question="group.question" :label="`主问题 ${group.number}`" />
+          <QuestionReviewCard
+            :active-practice="review.status === 'active' && review.feedbackPolicy === 'immediate'"
+            :question="group.question"
+            :label="`主问题 ${group.number}`"
+          />
           <QuestionReviewCard
             v-for="followUp in group.followUps"
             :key="followUp.id"
             :question="followUp"
-            :label="`主问题 ${group.number} 的追问`"
+            :label="
+              `主问题 ${group.number} 的追问` +
+              (group.question.referenceViewedAt &&
+              followUp.answer &&
+              Date.parse(group.question.referenceViewedAt) <= Date.parse(followUp.answer.createdAt)
+                ? ' · 看过主问题参考答案后作答'
+                : '')
+            "
           />
         </section>
         <QuestionReviewCard

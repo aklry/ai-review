@@ -5,8 +5,11 @@ import { useRouter } from 'vue-router';
 import { activateTrainingSelection } from '../lib/training-selection.js';
 import { useTrainingStore, type Phase } from '../stores/training.js';
 import RubricFeedback from '../components/RubricFeedback.vue';
+import PracticeLinks from '../components/PracticeLinks.vue';
+import VoiceAnswer from '../components/VoiceAnswer.vue';
 import ReferenceAnswer from '../components/ReferenceAnswer.vue';
 
+const audioBusy = ref(false);
 const resumeFileInput = ref<HTMLInputElement | null>(null);
 const props = defineProps<{ resumeSessionId?: string }>();
 const router = useRouter();
@@ -64,6 +67,28 @@ const phaseTitle = computed(() => {
   return titles[phase.value];
 });
 
+const now = ref(Date.now());
+let clock: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  clock = setInterval(() => {
+    now.value = Date.now();
+  }, 1000);
+});
+onBeforeUnmount(() => clearInterval(clock));
+const timeLeft = computed(() => {
+  if (!session.value?.deadlineAt) return '';
+  const remaining = Math.max(
+    0,
+    Math.ceil(
+      (Date.parse(session.value.deadlineAt) -
+        (session.value.pausedAt ? Date.parse(session.value.pausedAt) : now.value)) /
+        1000,
+    ),
+  );
+  return remaining
+    ? Math.floor(remaining / 60) + '分' + (remaining % 60) + '秒'
+    : '时间到，提交本题后结束';
+});
 const progress = computed(() => {
   if (!baseQuestionCount.value) return 0;
   return Math.min(100, Math.round((currentQuestionIndex.value / baseQuestionCount.value) * 100));
@@ -395,6 +420,18 @@ function addStoryDraft(): void {
                 : '已识别关键事实，可开始受控模拟。'
             }}</span>
             <div class="action-group">
+              <el-select v-model="trainingStore.feedbackPolicy" aria-label="反馈方式"
+                ><el-option label="逐题辅导" value="immediate" /><el-option
+                  label="完整模拟 · 结束后反馈"
+                  value="deferred"
+              /></el-select>
+              <el-select v-model="trainingStore.timeLimitMinutes" aria-label="面试计时"
+                ><el-option
+                  v-for="n in [0, 15, 30, 45, 60]"
+                  :key="n"
+                  :value="n"
+                  :label="n ? n + ' 分钟' : '不限时'"
+              /></el-select>
               <el-select v-model="interviewLanguage" aria-label="面试语言">
                 <el-option label="中文" value="zh-CN" />
                 <el-option label="English" value="en-US" />
@@ -442,7 +479,8 @@ function addStoryDraft(): void {
                 currentQuestion?.parentQuestionId ? ' · 追问' : ''
               }}</span
             >
-            <span>{{ baseQuestionCount }} 题计划</span>
+            <span v-if="timeLeft">{{ session?.pausedAt ? '已暂停 · ' : '' }}{{ timeLeft }}</span
+            ><span>{{ baseQuestionCount }} 题计划</span>
           </div>
           <el-progress :percentage="progress" :show-text="false" :stroke-width="7" />
           <div v-if="currentQuestion" class="question-panel">
@@ -457,25 +495,61 @@ function addStoryDraft(): void {
             <h2>所有题目已完成</h2>
             <p>本轮回答已保存，可以结束并生成训练报告。</p>
           </div>
+          <VoiceAnswer
+            v-if="currentQuestion"
+            :key="currentQuestion.id"
+            :question-id="currentQuestion.id"
+            :language="interviewLanguage"
+            :disabled="loading || !!session?.pausedAt"
+            @busy="audioBusy = $event"
+            @transcript="answerText = [answerText, $event].filter(Boolean).join('\n')"
+          />
           <el-input
             v-model="answerText"
             type="textarea"
             :rows="12"
             resize="none"
-            :disabled="loading || !currentQuestion || session?.status !== 'active'"
+            :disabled="
+              loading || !!session?.pausedAt || !currentQuestion || session?.status !== 'active'
+            "
             placeholder="基于真实经历作答。可以使用 STAR 结构，并补充技术取舍与量化结果。"
           />
           <div class="form-actions">
-            <span>这是受控训练模式，不生成真实面试中的实时作答内容。</span>
+            <span role="status">{{
+              loading
+                ? '正在处理，请稍候…'
+                : session?.pausedAt
+                  ? '面试已暂停'
+                  : currentQuestion?.parentQuestionId && session?.feedbackPolicy !== 'deferred'
+                    ? '辅导后的追问'
+                    : ''
+            }}</span>
+            <div v-if="currentQuestion" class="action-group">
+              <el-button
+                :disabled="audioBusy || loading"
+                @click="trainingStore.control(session?.pausedAt ? 'resume' : 'pause')"
+                >{{ session?.pausedAt ? '继续' : '暂停' }}</el-button
+              >
+              <el-button
+                :disabled="audioBusy || loading || !!session?.pausedAt"
+                @click="trainingStore.control('skip')"
+                >跳过本题</el-button
+              >
+            </div>
             <div class="action-group">
               <el-button
                 :loading="loading"
-                :disabled="!canSubmitAnswer"
+                :disabled="!canSubmitAnswer || audioBusy"
                 @click="trainingStore.sendAnswer"
               >
                 提交回答
               </el-button>
-              <el-button type="primary" :loading="loading" @click="trainingStore.finishInterview">
+              <el-button
+                type="primary"
+                :loading="loading"
+                :disabled="audioBusy"
+                @click="trainingStore.finishInterview"
+              >
                 结束并生成报告
               </el-button>
             </div>
@@ -483,7 +557,8 @@ function addStoryDraft(): void {
         </div>
 
         <aside class="feedback-panel">
-          <div class="section-heading">
+          <p v-if="session?.feedbackPolicy === 'deferred'">完整模拟结束后可查看评分和参考答案。</p>
+          <div v-else class="section-heading">
             <div>
               <p class="section-label">COACH AGENT</p>
               <h2>即时反馈</h2>
@@ -524,10 +599,18 @@ function addStoryDraft(): void {
               <p>“{{ latestCue.evidence[0]?.quote }}”</p>
             </div>
             <small v-if="modelState">{{ modelState.model }}</small>
-            <ReferenceAnswer v-if="latestCue.referenceAnswer" :answer="latestCue.referenceAnswer" />
+            <ReferenceAnswer
+              v-if="latestCue.referenceAnswer"
+              :answer="latestCue.referenceAnswer"
+              :track-question-id="latestAnsweredQuestion?.id"
+            />
             <p v-else class="history-muted">这条反馈未保存参考答案。</p>
           </template>
-          <el-empty v-else description="提交第一题后查看反馈" :image-size="72" />
+          <el-empty
+            v-else-if="session?.feedbackPolicy !== 'deferred'"
+            description="提交第一题后查看反馈"
+            :image-size="72"
+          />
         </aside>
       </section>
     </template>
@@ -544,7 +627,7 @@ function addStoryDraft(): void {
           <small>计分版本：{{ report.scoringVersion ?? 'legacy-v1' }}</small>
           <p class="review-entry">
             <el-link :href="`#/history/${encodeURIComponent(sessionId)}`" type="primary"
-              >查看逐题复盘</el-link
+              >查看逐题复盘与薄弱项练习</el-link
             >
           </p>
         </div>
@@ -585,6 +668,7 @@ function addStoryDraft(): void {
               </ul>
             </div>
           </div>
+          <PracticeLinks :session-id="sessionId" />
           <div class="plan-list">
             <p class="section-label">7 天训练计划</p>
             <article v-for="item in report.nextPlan" :key="item.day" class="plan-item">

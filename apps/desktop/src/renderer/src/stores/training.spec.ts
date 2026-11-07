@@ -137,6 +137,19 @@ describe('training store', () => {
     vi.unstubAllGlobals();
   });
 
+  it('restores drafts per question and clears them after a successful submission', async () => {
+    const store = useTrainingStore();
+    await store.activate('session_1');
+    store.answerText = 'unsent answer';
+    store.applySession(session({ activeQuestionId: 'question_2' }));
+    expect(store.answerText).toBe('');
+    store.applySession(session());
+    expect(store.answerText).toBe('unsent answer');
+    vi.mocked(api.submitAnswer).mockResolvedValue(answerResult());
+    await store.sendAnswer();
+    expect(localStorage.getItem('interview.draft.session_1.' + question.id)).toBeNull();
+  });
+
   it('resumes an explicitly selected historical session ahead of saved or in-memory IDs', async () => {
     const store = useTrainingStore();
     store.sessionId = 'current-session';

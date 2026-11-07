@@ -8,6 +8,7 @@ import type {
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 
 export type TurnResponse = {
+  feedbackPolicy?: string;
   cue: CoachingCue;
   nextQuestion: InterviewQuestion | null;
   model: string;
@@ -43,7 +44,14 @@ export class SessionRepository {
         },
       });
       const session = await tx.interviewSession.create({
-        data: { planId: plan.id, mode: 'simulation' },
+        data: {
+          planId: plan.id,
+          mode: 'simulation',
+          feedbackPolicy: input.feedbackPolicy ?? 'immediate',
+          ...(input.timeLimitMinutes
+            ? { deadlineAt: new Date(Date.now() + input.timeLimitMinutes * 60000) }
+            : {}),
+        },
       });
       const persisted = questions.map((question, order) => ({
         ...question,

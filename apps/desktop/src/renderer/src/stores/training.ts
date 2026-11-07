@@ -93,6 +93,25 @@ export const useTrainingStore = defineStore('training', () => {
   const currentQuestion = ref<InterviewQuestion | null>(null);
   const currentQuestionIndex = ref(0);
   const answerText = ref('');
+  const feedbackPolicy = ref<'immediate' | 'deferred'>('immediate');
+  const timeLimitMinutes = ref(0);
+  const draftKey = () =>
+    sessionId.value && currentQuestion.value
+      ? 'interview.draft.' + sessionId.value + '.' + currentQuestion.value.id
+      : '';
+  function draft(action: 'get' | 'save' | 'remove', value = '') {
+    const key = draftKey();
+    if (!key) return '';
+    try {
+      if (action === 'get') return localStorage.getItem(key) ?? '';
+      if (action === 'remove' || !value) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    } catch {
+      /* Local storage can be unavailable. */
+    }
+    return '';
+  }
+  watch(answerText, (value) => draft('save', value), { flush: 'sync' });
   const latestCue = ref<CoachingResult['cue'] | null>(null);
   const latestAnsweredQuestion = ref<InterviewQuestion | null>(null);
   const analysis = ref<JobAnalysis | null>(null);
@@ -116,6 +135,7 @@ export const useTrainingStore = defineStore('training', () => {
       sessionId.value &&
       session.value?.status === 'active' &&
       currentQuestion.value &&
+      !session.value?.pausedAt &&
       answerText.value.trim() &&
       !loading.value,
     ),
@@ -255,7 +275,7 @@ export const useTrainingStore = defineStore('training', () => {
       loaded.status === 'active' && loaded.activeQuestionId
         ? (loaded.questions.find((question) => question.id === loaded.activeQuestionId) ?? null)
         : null;
-    answerText.value = '';
+    answerText.value = draft('get');
     latestCue.value = null;
     latestAnsweredQuestion.value = null;
     modelState.value = null;
@@ -384,7 +404,9 @@ export const useTrainingStore = defineStore('training', () => {
       answerText.value = '';
       currentQuestionIndex.value = result.currentQuestionIndex;
       currentQuestion.value = result.nextQuestion;
+      answerText.value = draft('get');
       if (session.value) {
+        session.value.version += 1;
         session.value.status = result.status;
         session.value.activeQuestionId = result.activeQuestionId;
         session.value.currentQuestionIndex = result.currentQuestionIndex;
@@ -447,6 +469,27 @@ export const useTrainingStore = defineStore('training', () => {
     }
   }
 
+  async function control(action: 'skip' | 'pause' | 'resume') {
+    const current = session.value;
+    if (!current?.activeQuestionId || !active || loading.value) return;
+    const n = generation;
+    loading.value = true;
+    errorMessage.value = '';
+    try {
+      const loaded = await mutateSession(current.id, () =>
+        api.controlSession(current.id, action, current.activeQuestionId!, current.version),
+      );
+      if (isCurrent(n) && sessionId.value === current.id) {
+        if (action === 'skip') draft('remove');
+        applySession(loaded);
+      }
+    } catch (error) {
+      if (isCurrent(n)) showError(error);
+    } finally {
+      if (isCurrent(n)) loading.value = false;
+    }
+  }
+
   async function startInterview(): Promise<void> {
     if (!active || loading.value || !profileId.value || !jobId.value) return;
     const requestGeneration = generation;
@@ -460,6 +503,8 @@ export const useTrainingStore = defineStore('training', () => {
         round: interviewRound.value,
         difficulty: interviewDifficulty.value,
         questionCount: questionCount.value,
+        ...(feedbackPolicy.value === 'deferred' ? { feedbackPolicy: feedbackPolicy.value } : {}),
+        ...(timeLimitMinutes.value ? { timeLimitMinutes: timeLimitMinutes.value } : {}),
       });
       if (isCurrent(requestGeneration)) applySession(created);
     } catch (error) {
@@ -480,6 +525,7 @@ export const useTrainingStore = defineStore('training', () => {
         api.finishInterviewSession(requestedSessionId),
       );
       if (!isCurrent(requestGeneration) || sessionId.value !== requestedSessionId) return;
+      draft('remove');
       report.value = finishedReport;
       if (session.value) {
         session.value.status = 'completed';
@@ -624,6 +670,9 @@ export const useTrainingStore = defineStore('training', () => {
     answersComplete,
     canSubmitAnswer,
     baseQuestionCount,
+    feedbackPolicy,
+    timeLimitMinutes,
+    control,
     activate,
     deactivate,
     applyJob,

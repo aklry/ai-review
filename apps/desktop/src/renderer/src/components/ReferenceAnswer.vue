@@ -1,11 +1,36 @@
 <script setup lang="ts">
 import type { ReferenceAnswer } from '@interview-assistant/contracts';
-defineProps<{ answer: ReferenceAnswer }>();
+import { ref } from 'vue';
+import { request } from '../lib/http.js';
+const props = defineProps<{ answer: ReferenceAnswer; trackQuestionId?: string | undefined }>();
+const recorded = ref(''),
+  notice = ref('');
+async function opened(event: Event) {
+  const id = props.trackQuestionId;
+  if (!id || !(event.target as HTMLDetailsElement).open || recorded.value === id) return;
+  try {
+    await request({
+      method: 'POST',
+      url: '/questions/' + encodeURIComponent(id) + '/reference-view',
+    });
+    recorded.value = id;
+    notice.value = '';
+  } catch {
+    notice.value = '查看记录保存失败，重新展开可重试。';
+  }
+}
 </script>
 
 <template>
-  <section class="reference-answer" aria-label="本题参考答案">
-    <h3>本题参考答案</h3>
+  <component
+    :is="trackQuestionId ? 'details' : 'section'"
+    class="reference-answer"
+    aria-label="本题参考答案"
+    @toggle="opened"
+  >
+    <summary v-if="trackQuestionId">查看本题参考答案</summary>
+    <h3 v-else>本题参考答案</h3>
+    <p v-if="notice" role="status">{{ notice }}</p>
     <p class="reference-hint">
       {{
         answer.kind === 'experience-template'
@@ -24,7 +49,7 @@ defineProps<{ answer: ReferenceAnswer }>();
         <li v-for="(fact, index) in answer.missingFacts" :key="index">{{ fact }}</li>
       </ul>
     </template>
-  </section>
+  </component>
 </template>
 
 <style scoped>

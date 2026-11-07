@@ -15,6 +15,9 @@ import { toCue } from './cue-record.js';
 import { SessionHistoryRepository } from './session-history.repository.js';
 
 export type InterviewSessionRecord = {
+  feedbackPolicy?: string;
+  pausedAt?: Date | null;
+  deadlineAt?: Date | null;
   id: string;
   status: string;
   currentQuestionIndex: number;
@@ -61,6 +64,48 @@ export class InterviewRepository {
   private readonly sessions: SessionRepository;
   constructor(private readonly prisma: PrismaClient) {
     this.sessions = new SessionRepository(prisma);
+  }
+
+  async recentTopics(profileId: string) {
+    const rows = await this.prisma.interviewQuestion.findMany({
+      where: { session: { plan: { profileId } }, parentQuestionId: null },
+      orderBy: [{ createdAt: 'desc' }, { order: 'asc' }],
+      take: 24,
+      select: { rubricSnapshot: true, answer: { select: { cue: { select: { score: true } } } } },
+    });
+    return rows.flatMap((row) => {
+      const snapshot = row.rubricSnapshot;
+      return snapshot &&
+        typeof snapshot === 'object' &&
+        !Array.isArray(snapshot) &&
+        typeof snapshot.bankId === 'string'
+        ? [{ id: snapshot.bankId, score: row.answer?.cue?.score ?? null }]
+        : [];
+    });
+  }
+  async controlSession(
+    session: InterviewSessionRecord,
+    token: string,
+    changes: Prisma.InterviewSessionUpdateManyMutationInput,
+    skippedId?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const update = await tx.interviewSession.updateMany({
+        where: {
+          id: session.id,
+          version: session.version,
+          turnLeaseToken: token,
+          status: 'active',
+        },
+        data: { ...changes, version: { increment: 1 }, turnLeaseToken: null, turnLeaseUntil: null },
+      });
+      if (!update.count) throw new Error('会话已更新，请重新载入');
+      if (skippedId)
+        await tx.interviewQuestion.update({
+          where: { id: skippedId },
+          data: { skippedAt: new Date() },
+        });
+    });
   }
 
   listSessions(query: SessionHistoryQuery) {

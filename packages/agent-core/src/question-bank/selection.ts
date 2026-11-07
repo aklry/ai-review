@@ -15,6 +15,8 @@ export function selectStandardQuestions(
     language: string;
     profileSummary: string;
     jobAnalysis?: unknown;
+    jobDescription?: string | undefined;
+    recentTopics?: Array<{ id: string; score: number | null }> | undefined;
   },
   seed = 'initial',
 ): InterviewQuestion[] {
@@ -42,17 +44,27 @@ export function selectStandardQuestions(
         ]
       : Array.from({ length: input.questionCount }, (_, i) => competencies[i % 4]!);
   const context = `${input.profileSummary}\n${JSON.stringify(input.jobAnalysis)}`.toLowerCase();
+  const recent = input.recentTopics ?? [];
+  const jd = input.jobDescription?.toLowerCase() ?? '';
+  const priority = (topic: (typeof topics)[number]) => {
+    const last = recent.findIndex((item) => item.id === topic.id);
+    const scored = recent.find((item) => item.id === topic.id && item.score !== null);
+    const weakness = scored?.score != null && scored.score <= 2 ? 3 : 0;
+    const relevance = topic.tags.reduce(
+      (sum, tag) => sum + Number(context.includes(tag)) + 2 * Number(jd.includes(tag)),
+      0,
+    );
+    return relevance + weakness - (last < 0 ? 0 : Math.max(1, 12 - last / 2));
+  };
   const used = new Set<string>();
   const covered = new Set<Competency>();
   return sequence.map((competency) => {
     const candidates = topics.filter(
       (topic) => topic.competency === competency && !used.has(topic.id),
     );
-    const relevance = (topic: (typeof topics)[number]) =>
-      topic.tags.filter((tag) => context.includes(tag)).length;
     candidates.sort(
       (a, b) =>
-        relevance(b) - relevance(a) ||
+        priority(b) - priority(a) ||
         hash(`${seed}:${a.id}`) - hash(`${seed}:${b.id}`) ||
         a.id.localeCompare(b.id),
     );

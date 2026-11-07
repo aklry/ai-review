@@ -29,7 +29,7 @@ it.skipIf(process.env.RUN_LIVE_RUBRIC_EVAL !== '1')(
     const quality = suite.summarize();
     const report = {
       createdAt: new Date().toISOString(),
-      dataset: 'synthetic-rubric-v1',
+      dataset: 'synthetic-rubric-v2',
       rubricVersion: 'rubric-v3',
       scope,
       elapsedMs: Date.now() - startedAt,

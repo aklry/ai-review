@@ -20,6 +20,7 @@ export const coachAgentInputSchema = z.object({
   profileSummary: z.string(),
   jobSummary: z.string(),
   priorCues: z.array(coachingCueSchema),
+  allowFollowUp: z.boolean().optional(),
 });
 export type CoachAgentInput = z.infer<typeof coachAgentInputSchema>;
 
@@ -53,7 +54,7 @@ export class CoachAgent {
   readonly runnable;
   constructor(model: AgentModelGateway) {
     this.runnable = structuredAgent({
-      name: 'CoachAgent.reference-answer-v2',
+      name: 'CoachAgent.reference-answer-v3',
       taskType: 'coaching',
       model,
       input: coachAgentInputSchema,
@@ -62,7 +63,7 @@ export class CoachAgent {
       maxOutputTokens: 4000,
       instructions: (input) =>
         referenceAnswerInstructions +
-        'Evaluate only this answer and current competency using supplied facts. Cite exact quotes. Do not make hiring decisions or invent a score without evidence. A suggested followUpQuestion is optional; the application decides whether it is allowed. Accept alternative valid solutions; length, keywords and STAR format alone are not evidence. Never invent candidate experience. ' +
+        'Evaluate only this answer and current competency using supplied facts. Cite exact quotes. Do not make hiring decisions or invent a score without evidence. Suggest a followUpQuestion only when clarification, verification or a deeper trade-off would materially change what is known. Omit it if the evidence is sufficient. Ask one targeted question grounded in the answer without revealing a solution; the application controls progression. Accept alternative valid solutions; length, keywords and STAR format alone are not evidence. Never invent candidate experience. ' +
         (input.currentQuestion.rubricSnapshot ? rubricInstructions : legacyInstructions),
       context: buildCoachingPrompt,
       validate: (output, input) => {

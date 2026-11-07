@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { coachingCueSchema, rubricSnapshotSchema } from '@interview-assistant/contracts';
 import { topics, rubricSamples, snapshotFor } from './catalog.js';
+import { practicePrompts } from './practice.js';
 import { selectStandardQuestions } from './selection.js';
 import { validateRubric } from '../validation/rubric.js';
 import { CoachAgent } from '../agents/coach-agent.js';
@@ -91,6 +92,42 @@ describe('standard question bank', () => {
       }
     },
   );
+
+  it('rotates recent questions while preserving coverage and can revisit an older weakness', () => {
+    const initial = selectStandardQuestions(
+      { ...input, profileSummary: '', jobDescription: 'React' },
+      'seed',
+    );
+    const recentTopics = initial.map((q) => ({ id: q.id, score: 5 }));
+    const next = selectStandardQuestions(
+      { ...input, profileSummary: '', jobDescription: 'React', recentTopics },
+      'seed',
+    );
+    expect(next[0]!.id).not.toBe(initial[0]!.id);
+    expect(next.map((q) => q.competency)).toEqual(initial.map((q) => q.competency));
+    const history = Array.from({ length: 20 }, () => ({ id: 'sys-cache', score: 5 })).concat({
+      id: 'fe-race',
+      score: 1,
+    });
+    expect(
+      selectStandardQuestions({ ...input, profileSummary: '', recentTopics: history }, 'seed')[0]
+        ?.id,
+    ).toBe('fe-race');
+  });
+  it('provides separate practice and retest cases for every supported theme and language', () => {
+    for (const entry of topics)
+      for (const language of ['en-US', 'zh-CN', 'mixed'] as const) {
+        const source = {
+          ...question,
+          rubricSnapshot: snapshotFor(entry, 'l2'),
+          competency: entry.competency,
+          prompt: entry.prompt,
+        };
+        const prompts = practicePrompts(source, language);
+        expect(prompts[0]).toBe(source.prompt);
+        expect(new Set(prompts).size).toBe(3);
+      }
+  });
 
   it('replays the same selection, localizes prompts and does not share mutable snapshots', () => {
     const questions = selectStandardQuestions(input, 'same');

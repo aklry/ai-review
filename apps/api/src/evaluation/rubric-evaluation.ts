@@ -1,5 +1,6 @@
 import {
   CoachAgent,
+  difficultyConstraints,
   rubricSamples,
   topics,
   snapshotFor,
@@ -24,6 +25,7 @@ export function createRubricEvaluation(
     id: string;
     bankId: string;
     quality: string;
+    difficulty?: 'l1' | 'l2' | 'l3';
     answer: string;
     expectedRange: readonly [number, number];
     split: string;
@@ -35,6 +37,28 @@ export function createRubricEvaluation(
       cases.push({ ...sample, id: `${sample.id}:repeat-${repeat}`, language: 'zh-CN' });
   if (scope !== 'smoke')
     cases.push(
+      {
+        id: 'edge:l1-lifecycle',
+        bankId: 'fe-race',
+        quality: 'strong',
+        difficulty: 'l1',
+        split: 'edge',
+        language: 'zh-CN',
+        expectedRange: [4, 5],
+        answer:
+          '先发的请求可能后到。每次发请求创建独立对象，只有对象仍等于当前请求才允许写入结果、错误和加载状态，卸载或清空就把当前对象置空。取消请求节省资源，身份检查保证正确。用可控 Promise 先返回 B 再返回 A，覆盖失败、卸载、清空，断言旧响应均未改动视图。',
+      },
+      {
+        id: 'edge:l3-alternative',
+        bankId: 'fe-race',
+        quality: 'strong',
+        difficulty: 'l3',
+        split: 'edge',
+        language: 'en-US',
+        expectedRange: [4, 5],
+        answer:
+          'Concurrent responses complete out of order. With switchMap the view subscribes only to the latest query. Unsubscribe the obsolete request and on unmount; isolate errors inside each inner stream, bind loading and errors to that subscription. Even if transport cancellation fails the old subscriber is closed. A generation guard is another option with more manual bookkeeping. Test with virtual time: slow A after fast B, latest request failing, clear, and teardown; assert no stale state changes.',
+      },
       {
         id: 'edge:concise-correct',
         bankId: 'fe-race',
@@ -98,10 +122,17 @@ export function createRubricEvaluation(
           currentQuestion: {
             id: topic.id,
             competency: topic.competency,
-            difficulty: 'l2',
-            prompt: sample.language === 'en-US' ? topic.english : topic.prompt,
+            difficulty: sample.difficulty ?? 'l2',
+            prompt:
+              (sample.language === 'en-US' ? topic.english : topic.prompt) +
+              (sample.difficulty
+                ? ' ' +
+                  difficultyConstraints[sample.difficulty][
+                    sample.language === 'en-US' ? 'en' : 'zh'
+                  ]
+                : ''),
             isCore: true,
-            rubricSnapshot: snapshotFor(topic, 'l2'),
+            rubricSnapshot: snapshotFor(topic, sample.difficulty ?? 'l2'),
           },
           answerText: sample.answer,
           profileSummary: '',

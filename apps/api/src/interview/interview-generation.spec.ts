@@ -18,6 +18,7 @@ function setup(profileId = 'p1') {
   let saved: { id: string; questions: InterviewQuestion[] } | undefined;
   const generateJson = vi.fn();
   const repository = {
+    recentTopics: async () => [],
     getProfile: async () => ({
       id: 'p1',
       resumeText: 'React engineer building RAG tools.',

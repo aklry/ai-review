@@ -44,6 +44,9 @@ export type ProfileRecord = {
 };
 
 export type SessionRecord = {
+  feedbackPolicy?: 'immediate' | 'deferred';
+  pausedAt?: string | null;
+  deadlineAt?: string | null;
   id: string;
   status: string;
   currentQuestionIndex: number;
@@ -62,7 +65,7 @@ export type SessionRecord = {
 };
 
 export type CoachingResult = {
-  cue: CoachingCue;
+  cue: CoachingCue | null;
   nextQuestion: InterviewQuestion | null;
   currentQuestionIndex: number;
   activeQuestionId: string | null;
@@ -137,4 +140,17 @@ export function getInterviewSession(sessionId: string): Promise<SessionRecord> {
 
 export function getReport(sessionId: string): Promise<EvaluationReport> {
   return request({ method: 'GET', url: `/reports/${sessionId}` });
+}
+
+export function controlSession(
+  id: string,
+  action: 'skip' | 'pause' | 'resume',
+  questionId: string,
+  version: number,
+): Promise<SessionRecord> {
+  return request({
+    method: 'POST',
+    url: '/interview-sessions/' + id + '/control',
+    data: { action, questionId, version },
+  });
 }

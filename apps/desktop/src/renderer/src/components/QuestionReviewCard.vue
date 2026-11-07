@@ -2,8 +2,34 @@
 import type { SessionReview } from '@interview-assistant/contracts';
 import { competencyLabels, sourceLabels } from '../lib/interview-labels.js';
 import RubricFeedback from './RubricFeedback.vue';
+import VoiceAnswer from './VoiceAnswer.vue';
 import ReferenceAnswer from './ReferenceAnswer.vue';
-defineProps<{ question: SessionReview['questions'][number]; label: string }>();
+import { ref } from 'vue';
+import { request } from '../lib/http.js';
+const reason = ref(''),
+  notice = ref(''),
+  sending = ref(false);
+async function dispute() {
+  if (!reason.value.trim() || sending.value) return;
+  sending.value = true;
+  try {
+    await request({
+      method: 'POST',
+      url: '/questions/' + encodeURIComponent(props.question.id) + '/score-dispute',
+      data: { reason: reason.value },
+    });
+    notice.value = '已记录，待人工复核';
+  } catch (e) {
+    notice.value = e instanceof Error ? e.message : '提交失败';
+  } finally {
+    sending.value = false;
+  }
+}
+const props = defineProps<{
+  question: SessionReview['questions'][number];
+  label: string;
+  activePractice?: boolean;
+}>();
 </script>
 
 <template>
@@ -22,8 +48,11 @@ defineProps<{ question: SessionReview['questions'][number]; label: string }>();
       <el-tag v-if="question.answer?.cue" type="success"
         >{{ question.answer.cue.score }} / 5</el-tag
       >
-      <el-tag v-else type="info">{{ question.answer ? '暂无评分' : '未作答' }}</el-tag>
+      <el-tag v-else type="info">{{
+        question.skippedAt ? '已跳过' : question.answer ? '暂无评分' : '未作答'
+      }}</el-tag>
     </div>
+    <VoiceAnswer :key="question.id" :question-id="question.id" readonly />
     <template v-if="question.answer">
       <p class="section-label">我的回答</p>
       <p class="review-answer">{{ question.answer.answerText }}</p>
@@ -61,14 +90,28 @@ defineProps<{ question: SessionReview['questions'][number]; label: string }>();
             <p>{{ evidence.quote }}</p>
           </blockquote>
         </details>
+        <details>
+          <summary>对此评分有异议</summary>
+          <p v-if="question.dispute">已提交：{{ question.dispute }}</p>
+          <el-input
+            v-model="reason"
+            maxlength="1000"
+            placeholder="指出评分项、原文和分歧"
+          /><el-button :disabled="sending || !reason.trim()" @click="dispute"
+            >保存复核意见</el-button
+          ><span role="status">{{ notice }}</span>
+        </details>
         <ReferenceAnswer
           v-if="question.answer.cue.referenceAnswer"
           :answer="question.answer.cue.referenceAnswer"
+          :track-question-id="activePractice ? question.id : undefined"
         />
         <p v-else class="history-muted">这条历史反馈未保存参考答案。</p>
       </template>
-      <p v-else class="history-muted">这条历史回答没有保存反馈。</p>
+      <p v-else class="history-muted">暂无可展示的反馈。</p>
     </template>
-    <p v-else class="history-muted">本题尚未作答，可返回训练继续。</p>
+    <p v-else class="history-muted">
+      {{ question.skippedAt ? '本题已跳过，不参与评分。' : '本题未作答。' }}
+    </p>
   </article>
 </template>

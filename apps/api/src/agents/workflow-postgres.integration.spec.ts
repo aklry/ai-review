@@ -10,6 +10,9 @@ import type { InterviewQuestion } from '@interview-assistant/contracts';
 import { PrismaClient } from '../generated/prisma/client.js';
 import { SessionRepository, type TurnCommit } from '../interview/session.repository.js';
 import { InterviewRepository } from '../interview/interview.repository.js';
+import { PracticeService } from '../interview/practice.service.js';
+import { InterviewController } from '../interview/interview.controller.js';
+import type { PrismaService } from '../prisma/prisma.service.js';
 import { InterviewService } from '../interview/interview.service.js';
 import { DeepSeekProvider } from '../deepseek/deepseek.provider.js';
 import { AgentUsageGateway } from './agent-usage.gateway.js';
@@ -269,7 +272,6 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
         missingEvidence: [],
       },
       { ...cue, score: 2, followUpQuestion: 'How did you validate LCP?' },
-      { question: { ...question, prompt: 'How did you validate LCP?', isCore: false } },
       { ...cue, score: 5 },
       ...questions.slice(1).map((q) => ({ ...cue, competency: q.competency })),
       {
@@ -376,6 +378,12 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
       const first = await service.submitAnswer(session.id, firstInput);
       expect(first.currentQuestionIndex).toBe(0);
       expect(first.nextQuestion?.parentQuestionId).toBe(firstInput.questionId);
+      await new PracticeService(prisma as PrismaService, {} as WorkflowRuntime).markReferenceViewed(
+        firstInput.questionId,
+      );
+      expect(
+        (await service.getSessionReview(session.id)).questions[0]?.referenceViewedAt,
+      ).toBeTruthy();
       const callsAfterFirst = modelCalls;
       expect(await service.submitAnswer(session.id, firstInput)).toEqual(first);
       expect(modelCalls).toBe(callsAfterFirst);
@@ -484,7 +492,6 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
       });
       expect(usage.map((entry) => entry.taskType)).toEqual([
         'coaching',
-        'follow-up',
         'coaching',
         'coaching',
         'coaching',
@@ -497,7 +504,88 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
         ),
       ).toBe(true);
       expect(outputs).toHaveLength(0);
-      expect(modelCalls).toBe(9);
+      expect(modelCalls).toBe(8);
+
+      const practiceCue = review.questions.find((q) => q.id === firstInput.questionId)!.answer!
+        .cue!;
+      const criterion = practiceCue.rubricEvaluation!.items.find(
+        (item) => item.status !== 'met',
+      )!.criterionId;
+      const practiceRuntime = { workflows: { coach: vi.fn(async () => ({ cue: practiceCue })) } };
+      const practice = new PracticeService(
+        prisma as PrismaService,
+        practiceRuntime as unknown as WorkflowRuntime,
+      );
+      const [task, reopened] = await Promise.all([
+        practice.start(firstInput.questionId, criterion),
+        practice.start(firstInput.questionId, criterion),
+      ]);
+      expect(task.id).toBe(reopened.id);
+      let current = task;
+      for (let stage = 0; stage < 3; stage++) {
+        expect(current.stage).toBe(stage);
+        current = await practice.answer(task.id, stage, 'practice answer ' + stage);
+        expect(await practice.answer(task.id, stage, 'practice answer ' + stage)).toEqual(current);
+      }
+      expect(current.stage).toBe(3);
+      expect(current.prompt).toBeNull();
+      expect(current.freshRetest).toBe(true);
+      expect(current.original.answerText).toBe(resumeText);
+      expect(new Set(current.attempts.map((a) => a.prompt)).size).toBe(3);
+      expect(practiceRuntime.workflows.coach).toHaveBeenCalledTimes(3);
+      const secondCriterion = practiceCue.rubricEvaluation!.items.filter(
+        (i) => i.status !== 'met',
+      )[1]!.criterionId;
+      const another = await practice.start(firstInput.questionId, secondCriterion);
+      await practice.answer(another.id, 0, 'redo');
+      expect((await practice.answer(another.id, 1, 'case')).freshRetest).toBe(false);
+
+      const timed = await repository.createWorkflowSession(
+        {
+          profileId: profile.id,
+          jobId: job.id,
+          language: 'zh-CN',
+          round: 'technical',
+          difficulty: 'l2',
+          questionCount: 2,
+          feedbackPolicy: 'deferred',
+          timeLimitMinutes: 15,
+        },
+        session.questions.slice(0, 2),
+      );
+      const fake = new InterviewService(repository, {
+        workflows: {
+          coach: async () => ({
+            cue: practiceCue,
+            followUp: null,
+            model: 'fixture',
+            degraded: false,
+          }),
+        },
+      } as unknown as WorkflowRuntime);
+      const controller = new InterviewController(fake);
+      const firstTimed = timed.activeQuestionId!;
+      const paused = await fake.control(timed.id, 'pause', firstTimed, 0);
+      expect(paused.pausedAt).toBeTruthy();
+      await expect(
+        fake.submitAnswer(timed.id, { questionId: firstTimed, answerText: 'one' }),
+      ).rejects.toThrow();
+      await fake.control(timed.id, 'resume', firstTimed, paused.version);
+      const afterSkip = await fake.control(timed.id, 'skip', firstTimed, paused.version + 1);
+      const payload = { questionId: afterSkip.activeQuestionId!, answerText: 'final answer' };
+      const response = await controller.submitAnswer(timed.id, payload);
+      expect(response.cue).toBeNull();
+      expect((await controller.submitAnswer(timed.id, payload)).cue).toBeNull();
+      expect(JSON.stringify(await fake.getSession(timed.id))).not.toContain('referenceAnswer');
+      const hidden = await fake.getSessionReview(timed.id);
+      expect(hidden.questions[0]!.skippedAt).toBeTruthy();
+      expect(hidden.questions[1]!.answer!.cue).toBeNull();
+      expect(hidden.questions.every((item) => !item.rubricSnapshot)).toBe(true);
+      await expect(practice.dispute(payload.questionId, 'too early')).rejects.toThrow();
+      await practice.dispute(firstInput.questionId, 'Check evidence');
+      expect((await service.getSessionReview(session.id)).questions[0]?.dispute).toBe(
+        'Check evidence',
+      );
     } finally {
       await service.onModuleDestroy();
     }

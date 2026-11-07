@@ -21,6 +21,12 @@ export const router = createRouter({
           typeof route.query.sessionId === 'string' ? route.query.sessionId : undefined,
       }),
     },
+    {
+      path: '/history/:sessionId/practice/:questionId/:criterionId',
+      name: 'practice',
+      component: () => import('../views/PracticeView.vue'),
+      props: true,
+    },
     { path: '/history', name: 'history', component: HistoryView },
     {
       path: '/history/:sessionId',
