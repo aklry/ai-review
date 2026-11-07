@@ -14,7 +14,10 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
   app.setGlobalPrefix('api');
   app.enableCors({
-    origin: process.env.DESKTOP_ORIGIN ?? 'http://localhost:5173',
+    origin: [
+      process.env.DESKTOP_ORIGIN ?? 'http://localhost:5173',
+      ...(process.env.MOBILE_ORIGIN ? [process.env.MOBILE_ORIGIN] : []),
+    ],
     credentials: true,
   });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));

@@ -15,6 +15,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@interview-assistant/api-client": "workspace:*",
     "@interview-assistant/contracts": "workspace:*",
     "axios": "^1.8.4",
     "element-plus": "^2.9.7",

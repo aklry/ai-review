@@ -1,39 +1,24 @@
 import type {
-  AnswerSubmitInput,
-  EvaluationReport,
-  InterviewQuestion,
   InterviewSessionCreateInput,
-  Difficulty,
-  InterviewLanguage,
-  InterviewRound,
   JobRecord,
   JobAnalyzeInput,
   ProfileInput,
   ResumeDocumentSummary,
   StoryInput,
-  CoachingCue,
 } from '@interview-assistant/contracts';
+import { createSessionApi, type SessionRecord } from '@interview-assistant/api-client';
+export type { SessionRecord, CoachingResult } from '@interview-assistant/api-client';
 import { request, apiClient } from '../lib/http.js';
-import {
-  sessionHistoryPageSchema,
-  sessionReviewSchema,
-  type SessionHistoryQuery,
-} from '@interview-assistant/contracts';
 
-export async function getSessionHistory(query: SessionHistoryQuery) {
-  return sessionHistoryPageSchema.parse(
-    await request({ method: 'GET', url: '/interview-sessions', params: query }),
-  );
-}
-
-export async function getSessionReview(sessionId: string) {
-  return sessionReviewSchema.parse(
-    await request({
-      method: 'GET',
-      url: `/interview-sessions/${encodeURIComponent(sessionId)}/review`,
-    }),
-  );
-}
+export const {
+  getSessionHistory,
+  getSessionReview,
+  getInterviewSession,
+  submitAnswer,
+  controlSession,
+  finishInterviewSession,
+  getReport,
+} = createSessionApi(request);
 
 export type ProfileRecord = {
   id: string;
@@ -41,37 +26,6 @@ export type ProfileRecord = {
   displayName: string | null;
   resumeSource?: 'file' | 'text';
   resumeDocument?: ResumeDocumentSummary | null;
-};
-
-export type SessionRecord = {
-  feedbackPolicy?: 'immediate' | 'deferred';
-  pausedAt?: string | null;
-  deadlineAt?: string | null;
-  id: string;
-  status: string;
-  currentQuestionIndex: number;
-  activeQuestionId: string | null;
-  version: number;
-  questions: Array<InterviewQuestion & { answer?: unknown }>;
-  plan: {
-    profileId: string;
-    jobId: string;
-    language: InterviewLanguage;
-    round: InterviewRound;
-    difficulty: Difficulty;
-    profile: { resumeText: string; displayName?: string | null };
-    job: Pick<JobRecord, 'targetRole' | 'company' | 'description' | 'analysis' | 'analysisStatus'>;
-  };
-};
-
-export type CoachingResult = {
-  cue: CoachingCue | null;
-  nextQuestion: InterviewQuestion | null;
-  currentQuestionIndex: number;
-  activeQuestionId: string | null;
-  status: string;
-  degraded: boolean;
-  model: string;
 };
 
 export function createProfile(input: ProfileInput): Promise<ProfileRecord> {
@@ -118,39 +72,4 @@ export function createStory(profileId: string, input: StoryInput) {
 
 export function createInterviewSession(input: InterviewSessionCreateInput): Promise<SessionRecord> {
   return request({ method: 'POST', url: '/interview-sessions', data: input });
-}
-
-export function submitAnswer(sessionId: string, input: AnswerSubmitInput): Promise<CoachingResult> {
-  // CoachAgent and an optional InterviewerAgent call can each use 120 seconds.
-  return request({
-    method: 'POST',
-    url: `/interview-sessions/${sessionId}/answers`,
-    data: input,
-    timeout: 300_000,
-  });
-}
-
-export function finishInterviewSession(sessionId: string): Promise<EvaluationReport> {
-  return request({ method: 'POST', url: `/interview-sessions/${sessionId}/finish` });
-}
-
-export function getInterviewSession(sessionId: string): Promise<SessionRecord> {
-  return request({ method: 'GET', url: `/interview-sessions/${sessionId}` });
-}
-
-export function getReport(sessionId: string): Promise<EvaluationReport> {
-  return request({ method: 'GET', url: `/reports/${sessionId}` });
-}
-
-export function controlSession(
-  id: string,
-  action: 'skip' | 'pause' | 'resume',
-  questionId: string,
-  version: number,
-): Promise<SessionRecord> {
-  return request({
-    method: 'POST',
-    url: '/interview-sessions/' + id + '/control',
-    data: { action, questionId, version },
-  });
 }
