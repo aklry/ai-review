@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 interface Window {
   desktopApi: {
     apiBaseUrl: string;
@@ -8,5 +10,3 @@ interface Window {
     };
   };
 }
-
-/// <reference types="vite/client" />

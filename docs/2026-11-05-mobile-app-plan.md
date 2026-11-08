@@ -62,7 +62,7 @@ pnpm -F @interview-assistant/contracts build
 pnpm -F @interview-assistant/mobile dev
 ```
 
-在浏览器打开 `http://localhost:5174`。开发时默认地址 `/api` 由 Vite 代理到本机 3000 端口。首页可打开「连接设置」测试其他 HTTPS 地址。安装版首次启动时填写自己的 HTTPS API，也可以在构建时通过 `VITE_API_BASE_URL` 设置默认值。使用受信任的私有服务联调。公开部署前按上文接入访问控制。
+在浏览器打开 `http://localhost:5174`。开发时默认地址 `/api` 由 Vite 代理到本机 3000 端口。生产构建默认连接 `http://175.178.92.165:3100/api`。可在首页「连接设置」保存自己的 HTTPS 地址，也可以在构建时通过 `VITE_API_BASE_URL` 设置默认值。
 
 Android SDK 准备好后，首次生成原生工程并用 Android Studio 运行。
 
@@ -72,7 +72,7 @@ pnpm -F @interview-assistant/mobile android:add
 pnpm -F @interview-assistant/mobile android:open
 ```
 
-后续重新构建页面后运行 `pnpm -F @interview-assistant/mobile android:sync`。安装版默认来源是 `https://localhost`，在 API 环境配置 `MOBILE_ORIGIN=https://localhost` 并重启 API。手机通过 HTTPS 访问实际服务地址。
+后续重新构建页面后运行 `pnpm -F @interview-assistant/mobile android:sync`。安装版默认来源是 `https://localhost`，在 API 环境配置 `MOBILE_ORIGIN=https://localhost` 并重启 API。
 
 如本地 API 尚无 HTTPS，可保留 Vite 开发服务运行，用 USB 连接已启用调试的 Android 手机。生成原生工程后执行下列命令，WebView 将加载经 USB 转发的本机页面，API 请求仍由 Vite 代理。[Capacitor 真机运行命令](https://capacitorjs.com/docs/cli/commands/run)
 
