@@ -350,6 +350,10 @@ export const healthResponseSchema = z.object({
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
+export const speechTranscriptionSchema = z.object({
+  text: z.string().trim().min(1).max(20000),
+});
+
 export const createApiResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
   z.object({
     code: z.number().int(),

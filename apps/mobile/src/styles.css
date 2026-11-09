@@ -66,7 +66,8 @@ a {
   text-decoration: none;
   color: var(--muted);
 }
-.tabs .router-link-exact-active {
+.tabs:not(.filters) .router-link-exact-active,
+.filters .selected {
   color: var(--green);
   font-weight: 700;
   border-bottom: 3px solid var(--green);
@@ -160,7 +161,8 @@ label {
   margin-bottom: 7px;
 }
 input,
-textarea {
+textarea,
+select {
   display: block;
   width: 100%;
   padding: 12px;
@@ -169,6 +171,47 @@ textarea {
   background: #fff;
   color: var(--ink);
   font: inherit;
+}
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 15px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  text-decoration: none;
+  font-weight: 650;
+}
+.primary-link {
+  background: var(--green);
+  border-color: var(--green);
+  color: white;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.actions button {
+  flex: 1;
+}
+.finish-button {
+  width: 100%;
+  margin-top: 14px;
+}
+.filters {
+  overflow-x: auto;
+  gap: 10px;
+}
+.filters a {
+  white-space: nowrap;
+}
+input:disabled,
+textarea:disabled,
+select:disabled {
+  opacity: 0.65;
 }
 textarea {
   resize: vertical;
@@ -189,4 +232,10 @@ blockquote {
 :focus-visible {
   outline: 3px solid #457998;
   outline-offset: 3px;
+}
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
 }

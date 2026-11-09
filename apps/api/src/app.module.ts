@@ -4,9 +4,10 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { InterviewModule } from './interview/interview.module.js';
 import { ResumeModule } from './resume/resume.module.js';
+import { SpeechModule } from './speech/speech.module.js';
 
 @Module({
-  imports: [InterviewModule, ResumeModule],
+  imports: [InterviewModule, ResumeModule, SpeechModule],
   controllers: [AppController],
   providers: [AppService],
 })

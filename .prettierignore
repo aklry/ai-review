@@ -5,3 +5,8 @@ coverage
 .turbo
 pnpm-lock.yaml
 *.min.js
+**/android/**/build/**
+**/android/.gradle/**
+**/android/.kotlin/**
+**/android/app/src/main/assets/**
+**/android/capacitor-cordova-android-plugins/**

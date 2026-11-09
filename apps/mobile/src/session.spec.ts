@@ -5,7 +5,7 @@ import { api } from './connection';
 import { useSession } from './session';
 
 vi.mock('./connection', () => ({
-  address: { value: 'https://personal.example/api' },
+  address: 'https://personal.example/api',
   message: (e: Error) => e.message,
   api: {
     getInterviewSession: vi.fn(),
@@ -57,6 +57,64 @@ beforeEach(() => {
   setActivePinia(createPinia());
 });
 describe('手机继续训练', () => {
+  it('响应丢失后从含 nullable 字段的数据库反馈恢复上一题', async () => {
+    const cue = {
+      competency: 'project-depth',
+      score: 3,
+      strengths: ['说明过程'],
+      gaps: ['补充量化'],
+      nextAction: '补充结果',
+      evidence: [{ source: 'answer', quote: '回答内容' }],
+      followUpQuestion: null,
+    };
+    const next = record('q2');
+    next.questions[0] = { ...q1, answer: { cue } };
+    vi.mocked(api.getInterviewSession).mockResolvedValueOnce(record()).mockResolvedValue(next);
+    vi.mocked(api.submitAnswer).mockRejectedValue(new Error('lost'));
+    const store = useSession();
+    await store.open('s');
+    store.edit('回答内容');
+    await store.submit();
+    expect(store.feedback?.score).toBe(3);
+    expect(store.feedbackQuestion?.id).toBe('q1');
+  });
+
+  it('转写合并超长后保留全文并阻止提交', async () => {
+    vi.mocked(api.getInterviewSession).mockResolvedValue(record());
+    const store = useSession();
+    await store.open('s');
+    store.edit('a'.repeat(19999));
+    store.appendTranscript('录音文字');
+    await store.submit();
+    expect(store.draft.length).toBeGreaterThan(20000);
+    expect(store.error).toContain('20,000');
+    expect(api.submitAnswer).not.toHaveBeenCalled();
+  });
+  it('同一会话在提交未结束时重新打开，等待写入后再解锁新进度', async () => {
+    let complete!: () => void;
+    vi.mocked(api.getInterviewSession)
+      .mockResolvedValueOnce(record())
+      .mockResolvedValue(record('q2'));
+    vi.mocked(api.submitAnswer).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          complete = () => resolve({ cue: null } as never);
+        }),
+    );
+    const store = useSession();
+    await store.open('s');
+    store.edit('正在提交的回答');
+    const submission = store.submit();
+    const reopening = store.open('s');
+    expect(store.busy).toBe(true);
+    expect(store.needsSync).toBe(true);
+    expect(api.getInterviewSession).toHaveBeenCalledTimes(1);
+    complete();
+    await Promise.all([submission, reopening]);
+    expect(store.question?.id).toBe('q2');
+    expect(store.busy).toBe(false);
+    expect(store.needsSync).toBe(false);
+  });
   it('按服务端题目恢复草稿，桌面已答的题不回填至下一题', async () => {
     const store = useSession();
     vi.mocked(api.getInterviewSession).mockResolvedValue(record());
@@ -115,5 +173,52 @@ describe('手机继续训练', () => {
     await first;
     expect(store.session?.id).toBe('new');
     expect(store.question?.id).toBe('q2');
+  });
+
+  it('暂停和跳过使用服务端当前题目和版本，并在控制后重新同步', async () => {
+    vi.mocked(api.getInterviewSession).mockResolvedValue(record());
+    const store = useSession();
+    await store.open('s');
+    vi.mocked(api.getInterviewSession).mockResolvedValueOnce({
+      ...record(),
+      pausedAt: '2026-11-08T00:00:00.000Z',
+    });
+    await store.control('pause');
+    expect(api.controlSession).toHaveBeenCalledWith('s', 'pause', 'q1', 2);
+    expect(store.session?.pausedAt).toBeTruthy();
+    vi.mocked(api.getInterviewSession).mockResolvedValueOnce(record());
+    await store.control('resume');
+    expect(api.controlSession).toHaveBeenLastCalledWith('s', 'resume', 'q1', 2);
+    vi.mocked(api.getInterviewSession).mockResolvedValueOnce(record('q2'));
+    await store.control('skip');
+    expect(store.question?.id).toBe('q2');
+    expect(api.controlSession).toHaveBeenLastCalledWith('s', 'skip', 'q1', 2);
+  });
+
+  it('允许在回答完全部题目之前主动生成报告', async () => {
+    vi.mocked(api.getInterviewSession)
+      .mockResolvedValueOnce(record())
+      .mockResolvedValue({ ...record(), status: 'completed', activeQuestionId: null });
+    const store = useSession();
+    await store.open('s');
+    await store.finish();
+    expect(api.finishInterviewSession).toHaveBeenCalledWith('s');
+    expect(store.session?.status).toBe('completed');
+    expect(store.question).toBeUndefined();
+  });
+
+  it('草稿转写保留原文字，完整模拟不泄漏逐题反馈', async () => {
+    vi.mocked(api.getInterviewSession).mockResolvedValue({
+      ...record(),
+      feedbackPolicy: 'deferred',
+    });
+    vi.mocked(api.submitAnswer).mockResolvedValue({ cue: { score: 5 } } as never);
+    const store = useSession();
+    await store.open('s');
+    store.edit('文字草稿');
+    store.appendTranscript('录音内容');
+    expect(store.draft).toBe('文字草稿\n录音内容');
+    await store.submit();
+    expect(store.feedback).toBeNull();
   });
 });

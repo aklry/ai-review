@@ -4,10 +4,11 @@
 
 ## 当前状态
 
-当前已实现简历上传、岗位分析、文字模拟面试和训练报告，流程已拆分为五个独立 Agent：
+2026-11-09 更新。当前已实现简历上传、岗位分析、模拟面试和训练报告，手机端已覆盖独立训练与录音答题流程，服务端流程拆分为五个独立 Agent：
 
 - pnpm workspace + Turborepo
 - Vue 3 + Electron + electron-vite 桌面端
+- Vue 3 + Ionic Vue + Capacitor 8 手机端，支持资料准备、完整训练、历史复盘和专项练习
 - NestJS API、统一响应信封和 `/api/health` 健康检查
 - LangChainJS typed Runnable + LangGraph：ProfileAgent → JobAgent，InterviewerAgent 出题/有限追问，CoachAgent 反馈，ReportAgent 生成总结与七天计划
 - ChatDeepSeek 模型接入、主备降级、共享超时预算及逐步骤 token 用量记录
@@ -15,6 +16,7 @@
 - 桌面端轮询恢复、刷新恢复和未测评分数展示
 - BullMQ worker 占位入口
 - `@interview-assistant/contracts` 共享 Zod 契约
+- `@interview-assistant/api-client` 共享 HTTP、训练、资料准备、练习和语音接口
 - `@interview-assistant/agent-core` Agent 实现、图编排、证据校验、四维评分及 120 题库蓝图
 - ESLint flat config 与 Prettier
 - PostgreSQL、Redis、MinIO 本地 Compose
@@ -73,6 +75,27 @@ pnpm -F @interview-assistant/desktop dist
 生成的 NSIS 安装程序位于 `apps/desktop/release/`。如需生成未安装的目录版本用于检查，可执行
 `pnpm -F @interview-assistant/desktop dist:dir`，输出在 `apps/desktop/release/win-unpacked/`。
 
+## 手机端训练与 Android 构建
+
+手机可以独立完成与桌面对应的训练流程：上传 PDF/DOCX 简历或粘贴文本，填写岗位、公司和 JD，补充项目的 STAR 字段与量化结果，等待岗位分析并在重新打开页面后恢复分析任务。训练选项包括中文、英文、中英混合，初筛、技术面、系统设计、行为面，L1–L3 难度，4 题或 8 题，逐题辅导或完整模拟，以及不限时或 15/30/45/60 分钟。
+
+训练中支持暂停、继续、跳过、提前结束并生成报告；提前结束遵循服务端的已答题条件。录音或转写期间禁止推进题目。每次操作后同步服务端进度，响应丢失时先查询再重试；本机草稿按 API、会话和题目隔离。历史页支持状态筛选与分页，复盘展示四维分数、未测评状态、主问题及追问、原回答、逐项评分与证据、参考答案和七天计划，并可记录参考答案查看、提交评分异议及从薄弱项进入三轮专项练习。
+
+手机答题和专项练习均可录音，单段最多三分钟。用户停止后可本机回听，点击“转为文字”后才上传音频到服务端识别；识别结果加入现有草稿，用户可校正，再主动点击提交触发评分。录音保存在录制手机的 IndexedDB，按题目或练习阶段隔离，可回听、重录和删除；服务端仅为本次转写临时处理音频，原音不做跨设备同步。切后台会停止录音并保存已取得的音频。麦克风授权失败时仍可输入文字。
+
+手机已移除连接设置。开发时默认使用 `/api` 和 Vite 代理；生产构建使用 `VITE_API_BASE_URL`，未配置时连接现有服务器 `http://175.178.92.165:3100/api`。旧的 `interview.mobile.api` 地址偏好不再读取，旧 `/settings` 链接回到首页。更换地址需要重新构建、同步并打包。
+
+依赖由维护者安装后，在仓库根目录运行：
+
+```powershell
+pnpm -F @interview-assistant/contracts build
+$env:VITE_API_BASE_URL = 'https://api.example.com/api'
+pnpm -F @interview-assistant/mobile build
+pnpm -F @interview-assistant/mobile android:sync
+```
+
+示例地址需替换为实际服务地址；使用默认服务器时可不设置该变量。当前已有 Android 工程，无需重复 `android:add`。服务端为安装版配置 `MOBILE_ORIGIN=https://localhost` 并重启；如果修改 Capacitor 的页面来源，则填写实际 Origin。APK 构建、Android 真机权限与中断恢复、真实 ASR 转写尚需按 [Android 构建指南](docs/android-build-guide.md) 验收；前端构建或模拟服务测试不能替代这些结果。功能范围见 [移动端规划](docs/2026-11-05-mobile-app-plan.md)。
+
 ## 简历文件上传
 
 训练页的候选人档案默认使用文件上传：
@@ -82,9 +105,24 @@ pnpm -F @interview-assistant/desktop dist
 - PostgreSQL 只保存文件元数据、解析状态和解析后的 `resumeText`。
 - 旧版 `.doc`、扫描 PDF 暂不直接解析；请另存为 DOCX 或文本型 PDF。
 - API 路由为 `POST /api/profiles/resume`，使用 `multipart/form-data` 的 `file` 字段。
-- 解析失败时，桌面端可以切换到手动粘贴文本的兼容入口。
+- 解析失败时，桌面端和手机端都可以切换到手动粘贴文本的兼容入口。
 
 MinIO 配置优先使用 `MINIO_*` 环境变量；现有 `S3_ENDPOINT`、`S3_ACCESS_KEY`、`S3_SECRET_KEY`、`S3_BUCKET` 仍可作为兼容配置。
+
+## 服务端语音转写
+
+手机语音转写需要部署新版 API，并在 `apps/api/.env` 或服务端环境中配置兼容 OpenAI `/audio/transcriptions` 的服务：
+
+```properties
+ASR_BASE_URL=https://asr.example.com/v1
+ASR_MODEL=provider-supported-model
+ASR_API_KEY=
+ASR_TIMEOUT_MS=120000
+```
+
+`ASR_BASE_URL` 为 API 根地址（保留提供方要求的 `/v1` 等路径），`ASR_MODEL` 为提供方支持的模型，两者必填；自建免密服务可留空 `ASR_API_KEY`。超时默认 120 秒，配置上限为 180 秒。密钥仅放在服务端，不复用 DeepSeek 密钥，也不放入任何 `VITE_*` 变量或 APK。
+
+`POST /api/speech/transcriptions` 接收 multipart 的 `file` 和 `language`（`zh-CN`、`en-US`、`mixed`），返回统一信封中的 `{ text: string }`。音频必须是 16 kHz、单声道、16-bit PCM WAV，最多 180 秒且不超过 6 MB；手机上传前完成格式转换，服务端再校验容器、格式、长度和时长。服务端临时转发音频，不保存到业务库或对象存储，不记录音频或识别正文。缺少配置返回明确的“语音转写服务未配置”，不影响文字训练和本机回听；真实服务配置与效果需另行验收。
 
 ## API 约定
 
@@ -169,8 +207,10 @@ pnpm -F @interview-assistant/api eval:live
 apps/
   api/       NestJS HTTP API
   desktop/   Electron main/preload + Vue renderer
+  mobile/    Ionic Vue + Capacitor Android 客户端
   worker/    BullMQ 占位入口（当前岗位分析由 API 持久恢复调度）
 packages/
+  api-client/ 共享 HTTP、训练、资料准备、练习及语音调用
   agent-core/ 五个 Agent、LangGraph 工作流、证据校验、评分及题库配置
   contracts/  Zod schema、DTO 和跨端事件契约
 infra/
