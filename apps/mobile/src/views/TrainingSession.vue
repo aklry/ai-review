@@ -8,6 +8,7 @@ import { address } from '../connection';
 const props = defineProps<{ id: string }>();
 const store = useSession();
 const audioBusy = ref(false);
+const submitting = ref(false);
 const now = ref(Date.now());
 let clock: ReturnType<typeof setInterval> | undefined;
 const timeLeft = computed(() => {
@@ -34,6 +35,15 @@ function onShow() {
 function input(event: Event) {
   store.edit((event.target as HTMLTextAreaElement).value);
 }
+async function submit() {
+  if (store.busy || audioBusy.value || submitting.value) return;
+  submitting.value = true;
+  try {
+    await store.submit();
+  } finally {
+    submitting.value = false;
+  }
+}
 onMounted(() => {
   void store.open(props.id);
   clock = setInterval(() => (now.value = Date.now()), 1000);
@@ -59,7 +69,10 @@ watch(
     </button>
   </header>
   <p v-if="store.error" role="alert">{{ store.error }}</p>
-  <p v-if="store.busy" role="status">正在与服务器同步…</p>
+  <p v-if="store.busy" class="loading-status" role="status">
+    <span class="loading-spinner" aria-hidden="true"></span>
+    {{ submitting ? '正在提交回答，请稍候…' : '正在与服务器同步…' }}
+  </p>
   <template v-if="store.session">
     <h1>{{ store.session.plan.job.targetRole }}</h1>
     <section
@@ -129,7 +142,7 @@ watch(
       >
         继续已暂停的训练
       </button>
-      <form v-else @submit.prevent="!audioBusy && store.submit()">
+      <form v-else @submit.prevent="submit">
         <label for="answer">你的回答</label>
         <VoiceAnswer
           :key="JSON.stringify([address, store.session.id, store.question.id])"
@@ -153,6 +166,7 @@ watch(
         <small v-if="store.draft && !store.storageError" role="status">草稿已保存在本机</small>
         <button
           class="primary"
+          :aria-busy="submitting"
           :disabled="
             store.busy ||
             audioBusy ||
@@ -161,7 +175,8 @@ watch(
             store.draft.trim().length > 20000
           "
         >
-          提交回答
+          <span v-if="submitting" class="loading-spinner" aria-hidden="true"></span>
+          {{ submitting ? '正在提交…' : '提交回答' }}
         </button>
       </form>
       <div

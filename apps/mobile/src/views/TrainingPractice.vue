@@ -16,6 +16,7 @@ const props = defineProps<{
 const practice = usePractice();
 const task = computed(() => practice.task);
 const audioBusy = ref(false);
+const submitting = ref(false);
 const stages = ['原题重答', '案例练习', '变式复测'];
 const labels = { met: '已满足', missing: '未说明', incorrect: '存在错误', unclear: '需要澄清' };
 const focus = computed(() =>
@@ -27,6 +28,15 @@ function statusFor(cue: CoachingCue, criterionId: string) {
     (candidate) => candidate.criterionId === criterionId,
   );
   return item ? labels[item.status] : '暂无评分';
+}
+async function submit() {
+  if (practice.busy || audioBusy.value || submitting.value) return;
+  submitting.value = true;
+  try {
+    await practice.submit();
+  } finally {
+    submitting.value = false;
+  }
 }
 watch(
   () => [props.questionId, props.criterionId],
@@ -45,7 +55,10 @@ onBeforeUnmount(() => practice.leave());
   </header>
   <p v-if="practice.error" role="alert">{{ practice.error }}</p>
   <p v-if="practice.storageError" role="alert">{{ practice.storageError }}</p>
-  <p v-if="practice.busy" role="status">正在同步专项练习…</p>
+  <p v-if="practice.busy" class="loading-status" role="status">
+    <span class="loading-spinner" aria-hidden="true"></span>
+    {{ submitting ? '正在提交回答，请稍候…' : '正在同步专项练习…' }}
+  </p>
   <template v-if="task">
     <small>专项练习 · {{ task.sourceQuestionId }}</small>
     <h1>{{ focus?.description ?? '针对评分项练习' }}</h1>
@@ -75,6 +88,7 @@ onBeforeUnmount(() => practice.leave());
       <p v-if="practice.draft.length > 20000" role="alert">回答超过 20,000 字，请校正后提交。</p>
       <button
         class="primary"
+        :aria-busy="submitting"
         :disabled="
           practice.busy ||
           practice.needsSync ||
@@ -82,9 +96,10 @@ onBeforeUnmount(() => practice.leave());
           !practice.draft.trim() ||
           practice.draft.trim().length > 20000
         "
-        @click="practice.submit"
+        @click="submit"
       >
-        提交回答
+        <span v-if="submitting" class="loading-spinner" aria-hidden="true"></span>
+        {{ submitting ? '正在提交…' : '提交回答' }}
       </button>
     </section>
     <section v-else class="panel feedback">

@@ -6,6 +6,7 @@ import { usePreparation } from '../preparation';
 const router = useRouter();
 const setup = usePreparation();
 const fileInput = ref<HTMLInputElement>();
+const preparing = ref(false);
 const canAnalyze = computed(() =>
   Boolean(
     setup.form.targetRole.trim() &&
@@ -23,6 +24,15 @@ async function changedFile(event: Event) {
   const file = input.files?.[0];
   input.value = '';
   if (file) await setup.upload(file);
+}
+async function analyze() {
+  if (setup.loading || preparing.value) return;
+  preparing.value = true;
+  try {
+    await setup.analyze();
+  } finally {
+    preparing.value = false;
+  }
 }
 async function start() {
   const id = await setup.start();
@@ -147,25 +157,39 @@ onBeforeUnmount(() => setup.deactivate());
           ><button class="quiet" @click="setup.stories.splice(index, 1)">移除</button>
         </article>
       </section>
-      <button class="primary" :disabled="setup.loading || !canAnalyze" @click="setup.analyze">
-        {{ setup.loading ? '正在准备…' : '分析岗位' }}
+      <button
+        class="primary"
+        :disabled="setup.loading || !canAnalyze"
+        :aria-busy="preparing"
+        @click="analyze"
+      >
+        <span v-if="preparing" class="loading-spinner" aria-hidden="true"></span>
+        {{ preparing ? '正在准备分析…' : '分析岗位' }}
       </button>
     </fieldset>
   </template>
 
   <template v-else>
     <fieldset :disabled="setup.loading">
-      <section class="panel analysis-panel">
+      <section class="panel analysis-panel" :aria-busy="analyzing">
         <div class="section-heading">
           <div>
             <small>岗位分析</small>
             <h2>{{ setup.analysis?.summary ?? (analyzing ? '正在分析岗位' : '岗位分析失败') }}</h2>
           </div>
-          <button v-if="!analyzing" class="quiet" :disabled="setup.loading" @click="setup.analyze">
+          <button v-if="!analyzing" class="quiet" :disabled="setup.loading" @click="analyze">
             重新分析
           </button>
         </div>
-        <p v-if="analyzing" role="status">分析完成后可开始模拟面试</p>
+        <template v-if="analyzing">
+          <p class="loading-status" role="status">
+            <span class="loading-spinner" aria-hidden="true"></span>
+            岗位分析正在生成，完成后会自动刷新。
+          </p>
+          <div class="analysis-skeleton" aria-hidden="true">
+            <span v-for="line in 8" :key="line"></span>
+          </div>
+        </template>
         <template v-else-if="setup.analysis">
           <article
             v-for="item in setup.analysis.competencies"
@@ -235,7 +259,8 @@ onBeforeUnmount(() => setup.deactivate());
           <option value="l2">L2 进阶</option>
           <option value="l3">L3 挑战</option>
         </select>
-        <button class="primary" :disabled="setup.loading" @click="start">
+        <button class="primary" :disabled="setup.loading" :aria-busy="setup.loading" @click="start">
+          <span v-if="setup.loading" class="loading-spinner" aria-hidden="true"></span>
           {{ setup.loading ? '正在生成题目…' : '开始面试' }}
         </button>
       </section>

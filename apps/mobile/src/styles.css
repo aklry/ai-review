@@ -155,6 +155,60 @@ button.primary {
   border-color: transparent;
   font-weight: 650;
 }
+.loading-spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+  margin-inline-end: 8px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -0.125em;
+  animation: loading-spin 0.8s linear infinite;
+}
+.loading-status {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+button[aria-busy='true']:disabled {
+  opacity: 0.8;
+}
+.analysis-skeleton {
+  display: grid;
+  gap: 14px;
+  padding-block: 12px;
+}
+.analysis-skeleton span {
+  height: 14px;
+  border-radius: 5px;
+  background: #e7ede7;
+  animation: loading-pulse 1.6s ease-in-out infinite;
+}
+.analysis-skeleton span:nth-child(3n) {
+  width: 70%;
+}
+.analysis-skeleton span:first-child {
+  width: 40%;
+}
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes loading-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner,
+  .analysis-skeleton span {
+    animation: none;
+  }
+}
 label {
   display: block;
   font-weight: 650;
