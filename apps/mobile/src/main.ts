@@ -17,6 +17,9 @@ import Practice from './views/TrainingPractice.vue';
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
+    { path: '/learn', component: () => import('./views/LearningLibrary.vue') },
+    { path: '/learn/daily', component: () => import('./views/LearningSession.vue') },
+    { path: '/learn/:id', component: () => import('./views/LearningSession.vue'), props: true },
     { path: '/', component: Library, props: { historyMode: false } },
     { path: '/records', component: Library, props: { historyMode: true } },
     { path: '/prepare', component: Setup },

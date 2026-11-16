@@ -1,5 +1,6 @@
 export * from './sessions.js';
 export * from './workflows.js';
+export * from './learning.js';
 import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import type { ApiResponse } from '@interview-assistant/contracts';
 

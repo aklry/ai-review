@@ -79,6 +79,16 @@ onBeforeUnmount(() => {
     </div>
     <router-link class="button-link primary-link" to="/prepare">新建训练</router-link>
   </section>
+  <section v-if="!historyMode" class="panel">
+    <small>每天前进一步</small>
+    <h2>每日一练</h2>
+    <p>无需准备简历，直接练一道题。优先巩固待练题，答完查看逐项反馈。</p>
+    <router-link class="button-link primary-link" to="/learn/daily">开始今日练习</router-link>
+    <div class="actions">
+      <router-link class="button-link" to="/learn">错题与收藏本</router-link
+      ><router-link class="button-link" to="/learn?filter=progress">进步对比</router-link>
+    </div>
+  </section>
   <nav v-if="historyMode" class="tabs filters" aria-label="记录状态">
     <router-link
       :class="{ selected: selectedStatus === 'all' }"

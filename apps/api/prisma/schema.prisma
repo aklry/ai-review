@@ -8,6 +8,40 @@ datasource db {
   provider = "postgresql"
 }
 
+model LearningItem {
+  id           String @id @default(cuid())
+  userKey      String @default("local-user")
+  sourceKey    String
+  question     Json
+  language     String @default("zh-CN")
+  bookmarked   Boolean @default(false)
+  reviewStatus String @default("none")
+  attempts     Json @default("[]")
+  attemptCount Int @default(0)
+  firstScore   Int?
+  latestScore  Int?
+  version      Int @default(0)
+  leaseToken   String?
+  leaseUntil   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  days         DailyLearning[]
+
+  @@unique([userKey, sourceKey])
+  @@index([userKey, reviewStatus, updatedAt])
+}
+
+model DailyLearning {
+  id      String @id @default(cuid())
+  userKey String @default("local-user")
+  day     String
+  itemId  String
+  initialAttemptCount Int @default(0)
+  item    LearningItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([userKey, day])
+}
+
 model CandidateProfile {
   id                   String   @id @default(cuid())
   userKey              String   @default("local-user")

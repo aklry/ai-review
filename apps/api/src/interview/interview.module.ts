@@ -9,10 +9,12 @@ import { WorkflowRuntime } from '../agents/workflow-runtime.service.js';
 
 import { PracticeService } from './practice.service.js';
 import { PracticeController } from './practice.controller.js';
+import { LearningService } from './learning.service.js';
+import { LearningController } from './learning.controller.js';
 
 @Module({
   imports: [PrismaModule],
-  controllers: [InterviewController, PracticeController],
+  controllers: [InterviewController, PracticeController, LearningController],
   providers: [
     {
       provide: DeepSeekProvider,
@@ -24,6 +26,7 @@ import { PracticeController } from './practice.controller.js';
       inject: [PrismaService],
     },
     PracticeService,
+    LearningService,
     InterviewService,
     WorkflowRuntime,
   ],

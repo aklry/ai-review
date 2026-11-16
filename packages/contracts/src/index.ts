@@ -188,6 +188,56 @@ export const coachingCueSchema = z.object({
 });
 export type CoachingCue = z.infer<typeof coachingCueSchema>;
 
+export const learningAttemptSchema = z.object({
+  requestId: z.string().min(1),
+  createdAt: z.string().datetime(),
+  answerText: z.string().min(1),
+  cue: coachingCueSchema,
+});
+export const learningStatusSchema = z.enum(['none', 'pending', 'mastered']);
+export const learningItemSchema = z.object({
+  id: z.string().min(1),
+  question: questionSchema.extend({ rubricSnapshot: rubricSnapshotSchema }),
+  language: interviewLanguageSchema,
+  bookmarked: z.boolean(),
+  reviewStatus: learningStatusSchema,
+  version: z.number().int().nonnegative(),
+  attempts: learningAttemptSchema.array(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type LearningItem = z.infer<typeof learningItemSchema>;
+export const learningSummarySchema = learningItemSchema.omit({ attempts: true }).extend({
+  attemptCount: z.number().int().nonnegative(),
+  firstScore: competencyScoreSchema.nullable(),
+  latestScore: competencyScoreSchema.nullable(),
+});
+export const learningListQuerySchema = z.object({
+  filter: z.enum(['all', 'bookmarked', 'pending', 'mastered', 'progress']).default('all'),
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+});
+export type LearningFilter = z.infer<typeof learningListQuerySchema>['filter'];
+export const learningListSchema = z.object({
+  items: learningSummarySchema.array(),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export const learningUpdateSchema = z.object({
+  bookmarked: z.boolean().optional(),
+  reviewStatus: learningStatusSchema.optional(),
+});
+export const learningAnswerSchema = z.object({
+  requestId: z.string().uuid(),
+  version: z.number().int().nonnegative(),
+  answerText: z.string().trim().min(1).max(20000),
+});
+export const dailyLearningSchema = z.object({
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  item: learningItemSchema,
+  completed: z.boolean(),
+});
+
 export const feedbackPolicySchema = z.enum(['immediate', 'deferred']);
 export const interviewSessionCreateInputSchema = z.object({
   feedbackPolicy: feedbackPolicySchema.optional(),

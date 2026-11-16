@@ -13,6 +13,21 @@ const disputeDraft = ref<Record<string, string>>({});
 const disputeStatus = ref<Record<string, string>>({});
 const disputeBusy = ref<Record<string, boolean>>({});
 const markedReferences = new Set<string>();
+const learningLinks = ref<Record<string, string>>({});
+const learningBusy = ref<Record<string, boolean>>({});
+const learningError = ref<Record<string, string>>({});
+async function collectQuestion(questionId: string) {
+  if (learningBusy.value[questionId]) return;
+  learningBusy.value[questionId] = true;
+  learningError.value[questionId] = '';
+  try {
+    learningLinks.value[questionId] = (await api.importLearning(questionId)).id;
+  } catch (cause) {
+    learningError.value[questionId] = message(cause);
+  } finally {
+    learningBusy.value[questionId] = false;
+  }
+}
 let generation = 0;
 
 const groups = computed(
@@ -184,6 +199,21 @@ watch(
           :readonly="true"
         />
         <template v-if="q.answer">
+          <div
+            v-if="!q.parentQuestionId && q.rubricSnapshot && q.answer.cue?.rubricEvaluation"
+            class="actions"
+          >
+            <router-link
+              v-if="learningLinks[q.id]"
+              class="button-link"
+              :to="'/learn/' + encodeURIComponent(learningLinks[q.id]!)"
+              >已收藏 · 去重答与对比</router-link
+            >
+            <button v-else :disabled="learningBusy[q.id]" @click="collectQuestion(q.id)">
+              {{ learningBusy[q.id] ? '正在收藏…' : '收藏到练习本' }}
+            </button>
+            <p v-if="learningError[q.id]" role="alert">{{ learningError[q.id] }}</p>
+          </div>
           <h3>我的回答</h3>
           <p class="review-answer">{{ q.answer.answerText }}</p>
           <template v-if="q.answer.cue">

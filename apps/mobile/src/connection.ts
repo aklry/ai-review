@@ -3,6 +3,7 @@ import {
   createHttpClient,
   createSessionApi,
   createWorkflowApi,
+  createLearningApi,
   sendRequest,
 } from '@interview-assistant/api-client';
 import type { AxiosRequestConfig } from 'axios';
@@ -20,7 +21,11 @@ function transport(baseURL: string) {
 }
 const client = computed(() => transport(address));
 const request = <T>(config: AxiosRequestConfig) => sendRequest<T>(config, client.value);
-export const api = { ...createSessionApi(request), ...createWorkflowApi(request) };
+export const api = {
+  ...createSessionApi(request),
+  ...createWorkflowApi(request),
+  ...createLearningApi(request),
+};
 export function message(error: unknown) {
   return error instanceof Error ? error.message : '请求失败，请检查连接后重试';
 }
