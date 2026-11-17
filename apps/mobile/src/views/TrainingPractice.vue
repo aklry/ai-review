@@ -163,11 +163,14 @@ onBeforeUnmount(() => practice.leave());
 <style scoped>
 .comparison {
   overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
 }
 .comparison table {
   width: 100%;
   border-collapse: collapse;
-  background: white;
+  background: transparent;
 }
 .comparison caption {
   text-align: left;

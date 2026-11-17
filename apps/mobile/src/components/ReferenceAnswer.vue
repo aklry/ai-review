@@ -54,11 +54,11 @@ async function opened(event: Event) {
 <style scoped>
 .reference-answer {
   display: block;
-  margin-top: 14px;
-  padding: 14px;
-  border: 1px solid #b9d7cd;
-  border-radius: 6px;
-  background: #f3f8f4;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--reference-line);
+  border-radius: 16px;
+  background: var(--reference-bg);
   overflow-wrap: anywhere;
   line-height: 1.75;
 }

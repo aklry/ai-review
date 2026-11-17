@@ -278,27 +278,31 @@ onBeforeUnmount(() => setup.deactivate());
   gap: 12px;
 }
 .file-row {
+  position: relative;
+  flex-wrap: wrap;
   margin: 12px 0;
+}
+.file-row small {
+  flex: 1 0 100%;
+  margin: 0;
 }
 .visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
+  padding: 0;
+  margin: -1px;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 label {
   margin-top: 14px;
 }
 select {
-  width: 100%;
-  min-height: 44px;
-  padding: 9px;
   margin: 4px 0 8px;
-  border: 1px solid #84998e;
-  border-radius: 6px;
-  background: white;
-  font: inherit;
 }
 article {
   padding: 12px 0;

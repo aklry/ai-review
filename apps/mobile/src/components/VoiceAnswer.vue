@@ -224,17 +224,21 @@ const duration = () =>
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.65rem;
-  margin: 0.75rem 0;
+  gap: 10px;
+  margin: 12px 0;
 }
 
 .voice-answer audio {
-  height: 2.4rem;
+  flex: 1 1 180px;
+  height: 40px;
+  min-width: min(100%, 180px);
   max-width: 100%;
 }
 
 .recording-time {
   min-width: 3.25rem;
+  color: var(--danger);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 </style>

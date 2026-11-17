@@ -32,23 +32,34 @@ const labels = { met: '已满足', missing: '未说明', incorrect: '存在错�
   overflow-wrap: anywhere;
 }
 .rubric-item {
-  padding: 12px 0;
+  padding: 14px 0;
   border-top: 1px solid var(--line);
 }
 .rubric-item p {
   line-height: 1.7;
 }
 .rubric-status {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-end: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 1.7;
+  vertical-align: 1px;
 }
 .rubric-status.met {
-  color: #1c6a46;
+  color: var(--status-met);
+  background: var(--status-met-bg);
 }
 .rubric-status.missing,
 .rubric-status.unclear {
-  color: #8a6510;
+  color: var(--status-warn);
+  background: var(--status-warn-bg);
 }
 .rubric-status.incorrect {
-  color: #963e32;
+  color: var(--status-bad);
+  background: var(--status-bad-bg);
 }
 </style>

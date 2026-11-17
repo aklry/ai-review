@@ -319,14 +319,16 @@ watch(
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 14px;
 }
-.score-item,
-.plan-day {
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
 .score-item {
   display: grid;
   gap: 6px;
+  padding: 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+}
+.plan-day {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
 }
 .score-item progress {
   margin: 0;
@@ -341,16 +343,17 @@ watch(
   margin-top: 5px;
 }
 .report-band {
-  padding: 18px 0;
-  border-block: 1px solid var(--line);
-  margin-bottom: 18px;
+  padding: 4px 2px 8px;
+  margin-bottom: 8px;
 }
 .report-band h2 {
-  margin: 6px 0;
+  margin: 8px 0 12px;
+  font-size: clamp(40px, 12vw, 56px);
+  letter-spacing: -0.04em;
+  line-height: 1;
 }
 .question-group {
-  border-left: 2px solid var(--line);
-  padding-left: 12px;
+  margin-bottom: 8px;
 }
 .question-review {
   margin-bottom: 14px;
