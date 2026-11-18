@@ -30,7 +30,17 @@ ion-content {
   --keyboard-offset: 0px;
 }
 
+/* 全面隐藏 Ionic 与页面的滚动条，保持顺畅触控滑动 */
 ion-content::part(scroll) {
   overflow-x: hidden;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+ion-content::part(scroll)::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 </style>

@@ -4,14 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#f3f6f2" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#101614" media="(prefers-color-scheme: dark)" />
-    <title>面试训练</title>
+    <meta name="theme-color" content="#f6f8f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0c1210" media="(prefers-color-scheme: dark)" />
+    <title>AI 面试官 · 智能模拟面试与深度复盘</title>
     <style>
       html,
       body {
         margin: 0;
-        background: #f3f6f2;
+        background: #f6f8f7;
         color-scheme: light;
       }
       .startup {
@@ -22,68 +22,116 @@
         align-items: center;
         justify-content: center;
         padding: max(32px, env(safe-area-inset-top)) 32px max(32px, env(safe-area-inset-bottom));
-        color: #16302a;
-        font-family: system-ui, 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+        color: #0d1e19;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC',
+          'Segoe UI', Roboto, 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
         text-align: center;
+        background-image:
+          radial-gradient(120% 260px at 100% 0, rgba(14, 136, 100, 0.12), transparent 70%),
+          radial-gradient(100% 180px at 0% 20%, rgba(14, 136, 100, 0.08), transparent 60%);
       }
-      .startup-logo {
-        width: 132px;
-        height: 132px;
+      .startup-logo-wrapper {
+        position: relative;
+        width: 104px;
+        height: 104px;
+        margin-bottom: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .startup-pulse-ring {
+        position: absolute;
+        inset: -6px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, rgba(22, 173, 128, 0.35) 0%, rgba(8, 102, 74, 0.1) 100%);
+        animation: startup-pulse 2.2s infinite ease-out;
+      }
+      .startup-logo-core {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border-radius: 28px;
+        background: linear-gradient(135deg, #10a378 0%, #076d50 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 12px 32px rgba(7, 109, 80, 0.28);
+      }
+      .startup-logo-svg {
+        width: 58px;
+        height: 58px;
       }
       .startup h1 {
-        margin: 8px 0 14px;
-        font-size: 32px;
-        font-weight: 650;
-        letter-spacing: 0.08em;
+        margin: 0 0 8px;
+        font-size: 26px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        color: #0d1e19;
       }
       .startup p {
         margin: 0;
-        color: #53685f;
-        font-size: 14px;
-        line-height: 1.8;
+        color: #62776f;
+        font-size: 14.5px;
+        line-height: 1.6;
+        max-width: 260px;
       }
       .startup-status {
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 10px;
-        margin-top: 48px;
-        color: #53685f;
+        gap: 8px;
+        margin-top: 40px;
+        padding: 6px 16px;
+        border-radius: 999px;
+        background: rgba(14, 136, 100, 0.08);
+        color: #0e8864;
         font-size: 13px;
+        font-weight: 600;
       }
       .startup-spinner {
-        width: 16px;
-        height: 16px;
-        border: 2px solid #ccd7ce;
-        border-top-color: #155947;
+        width: 14px;
+        height: 14px;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
         border-radius: 50%;
-        animation: startup-spin 0.8s linear infinite;
+        animation: startup-spin 0.75s linear infinite;
       }
       @keyframes startup-spin {
         to {
           transform: rotate(360deg);
         }
       }
+      @keyframes startup-pulse {
+        0% { transform: scale(0.96); opacity: 0.6; }
+        50% { transform: scale(1.08); opacity: 0.2; }
+        100% { transform: scale(0.96); opacity: 0.6; }
+      }
       @media (prefers-reduced-motion: reduce) {
-        .startup-spinner {
+        .startup-spinner,
+        .startup-pulse-ring {
           animation: none;
         }
       }
       @media (prefers-color-scheme: dark) {
         html,
         body {
-          background: #101614;
+          background: #0c1210;
           color-scheme: dark;
         }
         .startup {
-          color: #e8f2ec;
+          color: #f0f7f4;
+          background-image:
+            radial-gradient(120% 260px at 100% 0, rgba(28, 182, 135, 0.2), transparent 70%),
+            radial-gradient(100% 180px at 0% 20%, rgba(28, 182, 135, 0.12), transparent 60%);
         }
-        .startup p,
+        .startup h1 {
+          color: #f0f7f4;
+        }
+        .startup p {
+          color: #8ca39a;
+        }
         .startup-status {
-          color: #a8bab2;
-        }
-        .startup-spinner {
-          border-color: #2d3d36;
-          border-top-color: #8ed7bc;
+          background: rgba(25, 165, 123, 0.15);
+          color: #38d6a4;
         }
       }
     </style>
@@ -91,28 +139,29 @@
   <body>
     <div id="app">
       <div class="startup" role="status" aria-live="polite">
-        <svg class="startup-logo" viewBox="0 0 108 108" fill="none" aria-hidden="true">
-          <path
-            d="M40 22H68Q86 22 86 40V68Q86 86 68 86H40Q22 86 22 68V40Q22 22 40 22Z"
-            fill="#155947"
-          />
-          <path
-            d="M40 37H68Q73 37 73 42V59Q73 64 68 64H51L40 73V64Q35 64 35 59V42Q35 37 40 37Z"
-            fill="white"
-          />
-          <path
-            d="M44 50L51 56L64 45"
-            stroke="#155947"
-            stroke-width="3.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-        <h1>面试训练</h1>
-        <p>把真实经历，练成有力的回答。</p>
+        <div class="startup-logo-wrapper" aria-hidden="true">
+          <span class="startup-pulse-ring"></span>
+          <div class="startup-logo-core">
+            <svg class="startup-logo-svg" viewBox="0 0 108 108" fill="none">
+              <path
+                d="M40 36H68Q74 36 74 42V60Q74 65 68 65H51L40 74V65Q34 65 34 60V42Q34 36 40 36Z"
+                fill="white"
+              />
+              <path
+                d="M44 50L51 57L64 45"
+                stroke="#0e8864"
+                stroke-width="4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+        </div>
+        <h1>AI 面试助手</h1>
+        <p>让真实经历，成为有说服力的回答。</p>
         <div class="startup-status">
           <span class="startup-spinner" aria-hidden="true"></span>
-          正在启动…
+          AI 面试官启动中…
         </div>
       </div>
     </div>
