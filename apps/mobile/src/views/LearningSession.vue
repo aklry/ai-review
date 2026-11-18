@@ -52,7 +52,11 @@ onBeforeUnmount(() => {
     </div>
     <h1 class="session-main-title">{{ store.day ? '今日核心考题打卡' : '单题针对复练' }}</h1>
     <p v-if="store.day" class="day-hint">
-      {{ store.completed ? '🎉 今日打卡已完成，可反复重答以巩固思路' : '每天攻克一道核心高频题，小步快跑持续进阶' }}
+      {{
+        store.completed
+          ? '🎉 今日打卡已完成，可反复重答以巩固思路'
+          : '每天攻克一道核心高频题，小步快跑持续进阶'
+      }}
     </p>
   </div>
 
@@ -68,10 +72,7 @@ onBeforeUnmount(() => {
     <section class="panel question-core-panel">
       <div class="q-meta-top">
         <span class="diff-badge">{{ store.item.question.difficulty.toUpperCase() }}</span>
-        <span
-          class="review-state-badge"
-          :class="store.item.reviewStatus"
-        >
+        <span class="review-state-badge" :class="store.item.reviewStatus">
           {{
             store.item.reviewStatus === 'mastered'
               ? '✓ 已掌握'
@@ -203,7 +204,11 @@ onBeforeUnmount(() => {
 
         <ReferenceAnswer v-if="latest.cue.referenceAnswer" :answer="latest.cue.referenceAnswer" />
 
-        <button class="primary re-answer-btn" :disabled="store.busy" @click="store.showResults = false">
+        <button
+          class="primary re-answer-btn"
+          :disabled="store.busy"
+          @click="store.showResults = false"
+        >
           {{ store.draft ? '继续当前草稿' : '针对弱点再答一次 ›' }}
         </button>
       </section>
@@ -219,12 +224,19 @@ onBeforeUnmount(() => {
             <article v-for="row in comparison" :key="row.id" class="change-row">
               <strong class="change-criterion-title">{{ row.description }}</strong>
               <div class="change-status-flow">
-                <span class="flow-pill before">{{ row.before ? labels[row.before] : '暂无评分' }}</span>
+                <span class="flow-pill before">{{
+                  row.before ? labels[row.before] : '暂无评分'
+                }}</span>
                 <span class="flow-arrow">→</span>
-                <span class="flow-pill after">{{ row.after ? labels[row.after] : '暂无评分' }}</span>
+                <span class="flow-pill after">{{
+                  row.after ? labels[row.after] : '暂无评分'
+                }}</span>
                 <span
                   class="change-tag"
-                  :class="{ positive: row.change === '新满足', negative: row.change === '需重新加强' }"
+                  :class="{
+                    positive: row.change === '新满足',
+                    negative: row.change === '需重新加强',
+                  }"
                 >
                   {{ row.change }}
                 </span>
@@ -248,13 +260,19 @@ onBeforeUnmount(() => {
           <span class="compare-sub-hint">完整作答轨迹</span>
         </div>
         <div class="attempts-disclosures">
-          <details v-for="(attempt, index) in store.item.attempts" :key="attempt.requestId" class="attempt-item-details">
+          <details
+            v-for="(attempt, index) in store.item.attempts"
+            :key="attempt.requestId"
+            class="attempt-item-details"
+          >
             <summary>
               <div class="attempt-summary-left">
                 <span class="attempt-idx-chip">#{{ index + 1 }}</span>
                 <strong class="attempt-score">{{ attempt.cue.score }} / 5</strong>
               </div>
-              <small class="attempt-time">{{ new Date(attempt.createdAt).toLocaleString('zh-CN') }}</small>
+              <small class="attempt-time">{{
+                new Date(attempt.createdAt).toLocaleString('zh-CN')
+              }}</small>
             </summary>
             <div class="attempt-detail-content">
               <p class="attempt-text">{{ attempt.answerText }}</p>

@@ -51,8 +51,12 @@ onBeforeUnmount(() => generation++);
       <span class="ai-pulse-dot"></span>
       智能知识库
     </div>
-    <h1 class="learn-hero-title">{{ filter === 'progress' ? '历次进步轨迹对比' : '错题与专项收藏本' }}</h1>
-    <p class="learn-hero-desc">模拟面试与练习中表现薄弱的考点自动沉淀于此，通过针对性重答彻底攻克。</p>
+    <h1 class="learn-hero-title">
+      {{ filter === 'progress' ? '历次进步轨迹对比' : '错题与专项收藏本' }}
+    </h1>
+    <p class="learn-hero-desc">
+      模拟面试与练习中表现薄弱的考点自动沉淀于此，通过针对性重答彻底攻克。
+    </p>
   </div>
 
   <nav class="tabs filters modern-learn-filters" aria-label="练习筛选">
@@ -80,7 +84,9 @@ onBeforeUnmount(() => generation++);
       <div class="empty-icon">📚</div>
       <h2>这里还没有相关练习题目</h2>
       <p>先完成一次每日一练，或在全真面试复盘中收藏重点题目。</p>
-      <router-link class="button-link primary-link start-daily-btn" to="/learn/daily">开始每日一练 ›</router-link>
+      <router-link class="button-link primary-link start-daily-btn" to="/learn/daily"
+        >开始每日一练 ›</router-link
+      >
     </section>
 
     <!-- 练习题目列表 -->
@@ -94,10 +100,7 @@ onBeforeUnmount(() => generation++);
         <div class="learn-card-top">
           <div class="status-tags-group">
             <span v-if="item.bookmarked" class="bookmark-tag">⭐ 已收藏</span>
-            <span
-              class="review-status-tag"
-              :class="item.reviewStatus"
-            >
+            <span class="review-status-tag" :class="item.reviewStatus">
               {{
                 item.reviewStatus === 'mastered'
                   ? '已掌握'
@@ -108,7 +111,9 @@ onBeforeUnmount(() => generation++);
             </span>
             <span class="diff-tag">{{ item.question.difficulty.toUpperCase() }}</span>
           </div>
-          <span v-if="item.attemptCount" class="attempts-count-tag">{{ item.attemptCount }} 次作答</span>
+          <span v-if="item.attemptCount" class="attempts-count-tag"
+            >{{ item.attemptCount }} 次作答</span
+          >
         </div>
 
         <h2 class="learn-prompt">{{ item.question.prompt }}</h2>
@@ -123,7 +128,9 @@ onBeforeUnmount(() => generation++);
             {{ item.attemptCount ? '已作答 1 次，再答一次即刻生成逐项对比' : '尚未开始作答' }}
           </p>
 
-          <strong class="action-arrow">{{ filter === 'progress' ? '查看逐项变化' : '打开练习' }} ›</strong>
+          <strong class="action-arrow"
+            >{{ filter === 'progress' ? '查看逐项变化' : '打开练习' }} ›</strong
+          >
         </div>
       </router-link>
     </div>
@@ -131,7 +138,9 @@ onBeforeUnmount(() => generation++);
     <!-- 分页器 -->
     <div v-if="result.total > result.pageSize" class="pager modern-pager">
       <button :disabled="result.page === 1" @click="load(result.page - 1)">上一页</button>
-      <span class="pager-text">{{ result.page }} / {{ Math.ceil(result.total / result.pageSize) }}</span>
+      <span class="pager-text"
+        >{{ result.page }} / {{ Math.ceil(result.total / result.pageSize) }}</span
+      >
       <button
         :disabled="result.page * result.pageSize >= result.total"
         @click="load(result.page + 1)"

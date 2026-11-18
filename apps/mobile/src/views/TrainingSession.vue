@@ -85,13 +85,21 @@ watch(
           <h1>{{ store.session.plan.job.targetRole }}</h1>
           <span class="ai-status-badge">
             <span class="ai-pulse-dot" aria-hidden="true"></span>
-            {{ store.session.status === 'active' ? (store.session.pausedAt ? '面试暂停中' : 'AI 考官在线') : '训练已结束' }}
+            {{
+              store.session.status === 'active'
+                ? store.session.pausedAt
+                  ? '面试暂停中'
+                  : 'AI 考官在线'
+                : '训练已结束'
+            }}
           </span>
         </div>
         <div class="ai-meta-row">
           <span class="ai-tag">{{ store.session.plan.round }}</span>
           <span class="ai-tag">{{ store.session.plan.difficulty.toUpperCase() }}</span>
-          <span class="ai-tag">{{ store.session.feedbackPolicy === 'deferred' ? '模拟考场' : '逐题辅导' }}</span>
+          <span class="ai-tag">{{
+            store.session.feedbackPolicy === 'deferred' ? '模拟考场' : '逐题辅导'
+          }}</span>
         </div>
       </div>
     </div>
@@ -160,14 +168,22 @@ watch(
       <div class="done-icon-box">🏆</div>
       <h2>模拟面试已圆满完成</h2>
       <p>AI 面试官已生成深度多维能力评估与 7 天进阶复盘建议。</p>
-      <router-link class="button-link primary-link" :to="'/review/' + encodeURIComponent(id)">打开复盘报告 ›</router-link>
+      <router-link class="button-link primary-link" :to="'/review/' + encodeURIComponent(id)"
+        >打开复盘报告 ›</router-link
+      >
     </section>
 
     <!-- 作答结束待生成报告状态 -->
-    <section v-else-if="store.session.status === 'awaiting_finish'" class="panel session-done-panel">
+    <section
+      v-else-if="store.session.status === 'awaiting_finish'"
+      class="panel session-done-panel"
+    >
       <div class="done-icon-box">📝</div>
       <h2>全场作答已结束</h2>
-      <p>已回答 {{ store.session.currentQuestionIndex }} / {{ count }} 道核心问题，点击立即让 AI 生成深度测评报告。</p>
+      <p>
+        已回答 {{ store.session.currentQuestionIndex }} / {{ count }} 道核心问题，点击立即让 AI
+        生成深度测评报告。
+      </p>
       <button class="primary" :disabled="store.busy || store.needsSync" @click="store.finish">
         生成全面测评报告
       </button>
@@ -177,11 +193,19 @@ watch(
     <section v-else-if="store.question" class="panel question-panel">
       <!-- 题目元信息与进度 -->
       <div class="question-header-row">
-        <div class="question-index-badge" :class="{ 'is-followup': !!store.question.parentQuestionId }">
+        <div
+          class="question-index-badge"
+          :class="{ 'is-followup': !!store.question.parentQuestionId }"
+        >
           <span class="q-type">{{ store.question.parentQuestionId ? '深入追问' : '主考题' }}</span>
           <span class="q-num">{{ store.session.currentQuestionIndex + 1 }} / {{ count }}</span>
         </div>
-        <div v-if="timeLeft" class="timer-pill" role="status" :class="{ 'is-paused': !!store.session.pausedAt }">
+        <div
+          v-if="timeLeft"
+          class="timer-pill"
+          role="status"
+          :class="{ 'is-paused': !!store.session.pausedAt }"
+        >
           <span class="timer-icon">⏱</span>
           <span>{{ store.session.pausedAt ? '已暂停 · ' : '剩余时间 · ' }}{{ timeLeft }}</span>
         </div>

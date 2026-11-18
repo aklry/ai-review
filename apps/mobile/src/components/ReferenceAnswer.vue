@@ -29,11 +29,15 @@ async function opened(event: Event) {
   >
     <summary v-if="trackQuestionId">
       <span class="ref-summary-title">💡 查看本题参考答案</span>
-      <span class="ref-kind-badge">{{ answer.kind === 'experience-template' ? '经历模板' : '示范思路' }}</span>
+      <span class="ref-kind-badge">{{
+        answer.kind === 'experience-template' ? '经历模板' : '示范思路'
+      }}</span>
     </summary>
     <div v-else class="ref-header">
       <h3>本题参考答案</h3>
-      <span class="ref-kind-badge">{{ answer.kind === 'experience-template' ? '经历模板' : '示范思路' }}</span>
+      <span class="ref-kind-badge">{{
+        answer.kind === 'experience-template' ? '经历模板' : '示范思路'
+      }}</span>
     </div>
 
     <p v-if="notice" class="notice-tip" role="status">{{ notice }}</p>

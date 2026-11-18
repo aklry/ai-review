@@ -188,7 +188,11 @@ const duration = () =>
 </script>
 
 <template>
-  <div v-if="!readonly || clipUrl" class="voice-answer" :class="{ 'is-recording': recording, 'has-clip': !!clipUrl }">
+  <div
+    v-if="!readonly || clipUrl"
+    class="voice-answer"
+    :class="{ 'is-recording': recording, 'has-clip': !!clipUrl }"
+  >
     <div class="voice-dock">
       <!-- 录音主触发按钮（纯文本保持测试 AST 兼容） -->
       <button
@@ -198,7 +202,9 @@ const duration = () =>
         :class="{ 'recording-active': recording, 'has-audio': !!clipUrl }"
         :disabled="disabled || working"
         @click="recording ? controller?.stop() : record()"
-      >{{ recording ? '停止录音' : clipUrl ? '重新录音' : '录音回答' }}</button>
+      >
+        {{ recording ? '停止录音' : clipUrl ? '重新录音' : '录音回答' }}
+      </button>
 
       <!-- 录音中：动态声波律动与跳动时间 -->
       <div v-if="recording" class="live-soundwave" aria-label="正在录音">
@@ -223,13 +229,17 @@ const duration = () =>
           class="transcribe-btn"
           :disabled="disabled || working || recording"
           @click="transcribe"
-        >转为文字</button>
+        >
+          转为文字
+        </button>
         <button
           type="button"
           class="discard-btn quiet"
           :disabled="disabled || working || recording"
           @click="discard"
-        >删除录音</button>
+        >
+          删除录音
+        </button>
       </div>
     </div>
 
@@ -327,21 +337,48 @@ const duration = () =>
   animation: wave-bounce 0.9s ease-in-out infinite alternate;
 }
 
-.bar-1 { animation-delay: 0.1s; height: 10px; }
-.bar-2 { animation-delay: 0.3s; height: 18px; }
-.bar-3 { animation-delay: 0.15s; height: 14px; }
-.bar-4 { animation-delay: 0.4s; height: 20px; }
-.bar-5 { animation-delay: 0.25s; height: 12px; }
+.bar-1 {
+  animation-delay: 0.1s;
+  height: 10px;
+}
+.bar-2 {
+  animation-delay: 0.3s;
+  height: 18px;
+}
+.bar-3 {
+  animation-delay: 0.15s;
+  height: 14px;
+}
+.bar-4 {
+  animation-delay: 0.4s;
+  height: 20px;
+}
+.bar-5 {
+  animation-delay: 0.25s;
+  height: 12px;
+}
 
 @keyframes wave-bounce {
-  0% { transform: scaleY(0.35); opacity: 0.5; }
-  100% { transform: scaleY(1.35); opacity: 1; }
+  0% {
+    transform: scaleY(0.35);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scaleY(1.35);
+    opacity: 1;
+  }
 }
 
 @keyframes rec-pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.02); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .recording-time {

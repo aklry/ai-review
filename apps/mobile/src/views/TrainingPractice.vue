@@ -160,7 +160,9 @@ onBeforeUnmount(() => practice.leave());
 
       <div class="comparison modern-comparison">
         <table>
-          <caption>各次作答的评分项状态</caption>
+          <caption>
+            各次作答的评分项状态
+          </caption>
           <thead>
             <tr>
               <th scope="col">评分考查项</th>
@@ -191,7 +193,9 @@ onBeforeUnmount(() => practice.leave());
         <div class="section-heading result-head">
           <div class="result-title-group">
             <span class="result-stage-tag">{{ index === 0 ? '首次回答' : stages[index - 1] }}</span>
-            <strong class="result-score">{{ result.cue.score }} <span class="denom">/ 5</span></strong>
+            <strong class="result-score"
+              >{{ result.cue.score }} <span class="denom">/ 5</span></strong
+            >
           </div>
         </div>
         <p class="result-next-action">{{ result.cue.nextAction }}</p>

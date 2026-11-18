@@ -57,7 +57,12 @@ onBeforeUnmount(() => setup.deactivate());
   </div>
 
   <p v-if="setup.error" role="alert">{{ setup.error }}</p>
-  <button v-if="setup.recoveryPending" class="recovery-btn" :disabled="setup.loading" @click="setup.retryRecovery">
+  <button
+    v-if="setup.recoveryPending"
+    class="recovery-btn"
+    :disabled="setup.loading"
+    @click="setup.retryRecovery"
+  >
     重试恢复上次分析
   </button>
   <p v-if="setup.uploadError" role="alert">{{ setup.uploadError }}</p>
@@ -72,10 +77,18 @@ onBeforeUnmount(() => setup.deactivate());
           <h2>目标求职岗位</h2>
         </div>
         <label for="role">岗位名称</label>
-        <input id="role" v-model="setup.form.targetRole" placeholder="例如：前端架构师、资深全栈工程师" />
+        <input
+          id="role"
+          v-model="setup.form.targetRole"
+          placeholder="例如：前端架构师、资深全栈工程师"
+        />
 
         <label for="company">目标公司 (可选)</label>
-        <input id="company" v-model="setup.form.company" placeholder="例如：字节跳动、腾讯、某创业公司" />
+        <input
+          id="company"
+          v-model="setup.form.company"
+          placeholder="例如：字节跳动、腾讯、某创业公司"
+        />
 
         <div class="label-with-hint">
           <label for="job-description">岗位描述与任职要求</label>
@@ -99,7 +112,11 @@ onBeforeUnmount(() => setup.deactivate());
           <h2>个人背景与简历</h2>
         </div>
         <label for="display-name">如何称呼你 (可选)</label>
-        <input id="display-name" v-model="setup.form.displayName" placeholder="例如：Alex、李同学" />
+        <input
+          id="display-name"
+          v-model="setup.form.displayName"
+          placeholder="例如：Alex、李同学"
+        />
 
         <div class="upload-box" @click="selectFile">
           <div class="upload-icon-circle">📄</div>
@@ -127,7 +144,9 @@ onBeforeUnmount(() => setup.deactivate());
         <div v-if="setup.resumeFileName" class="uploaded-pill" role="status">
           <span class="file-check">✓</span>
           <span class="file-name">{{ setup.resumeFileName }}</span>
-          <span v-if="setup.resumeDocument" class="file-chars">已解析 {{ setup.resumeDocument.extractedChars }} 字</span>
+          <span v-if="setup.resumeDocument" class="file-chars"
+            >已解析 {{ setup.resumeDocument.extractedChars }} 字</span
+          >
         </div>
 
         <div class="label-with-hint">
@@ -144,7 +163,9 @@ onBeforeUnmount(() => setup.deactivate());
           :disabled="setup.loading && setup.uploadProgress > 0"
           @input="setup.editResume(($event.target as HTMLTextAreaElement).value)"
         ></textarea>
-        <small class="field-tip">简历文本至少 20 字符，支持 AI 面试官就真实经历展开针对性深挖。</small>
+        <small class="field-tip"
+          >简历文本至少 20 字符，支持 AI 面试官就真实经历展开针对性深挖。</small
+        >
       </section>
 
       <!-- STAR 故事库卡片 -->
@@ -162,22 +183,50 @@ onBeforeUnmount(() => setup.deactivate());
           <summary>＋ 添加项目故事</summary>
           <div class="star-form">
             <label for="story-title">故事主题</label>
-            <input id="story-title" v-model="setup.storyDraft.title" placeholder="例如：高并发架构重构" />
+            <input
+              id="story-title"
+              v-model="setup.storyDraft.title"
+              placeholder="例如：高并发架构重构"
+            />
 
             <label for="story-project">项目名称</label>
-            <input id="story-project" v-model="setup.storyDraft.project" placeholder="例如：核心交易网关优化" />
+            <input
+              id="story-project"
+              v-model="setup.storyDraft.project"
+              placeholder="例如：核心交易网关优化"
+            />
 
             <label for="story-situation">Situation (背景)</label>
-            <textarea id="story-situation" v-model="setup.storyDraft.situation" rows="2" placeholder="当时面临怎样的业务挑战？"></textarea>
+            <textarea
+              id="story-situation"
+              v-model="setup.storyDraft.situation"
+              rows="2"
+              placeholder="当时面临怎样的业务挑战？"
+            ></textarea>
 
             <label for="story-task">Task (目标任务)</label>
-            <textarea id="story-task" v-model="setup.storyDraft.task" rows="2" placeholder="你承担的核心职责和指标是什么？"></textarea>
+            <textarea
+              id="story-task"
+              v-model="setup.storyDraft.task"
+              rows="2"
+              placeholder="你承担的核心职责和指标是什么？"
+            ></textarea>
 
             <label for="story-action">Action (行动)</label>
-            <textarea id="story-action" v-model="setup.storyDraft.action" rows="3" placeholder="你采取了哪些关键技术手段和设计决策？"></textarea>
+            <textarea
+              id="story-action"
+              v-model="setup.storyDraft.action"
+              rows="3"
+              placeholder="你采取了哪些关键技术手段和设计决策？"
+            ></textarea>
 
             <label for="story-result">Result (结果)</label>
-            <textarea id="story-result" v-model="setup.storyDraft.result" rows="2" placeholder="取得了怎样的量化业务收益？"></textarea>
+            <textarea
+              id="story-result"
+              v-model="setup.storyDraft.result"
+              rows="2"
+              placeholder="取得了怎样的量化业务收益？"
+            ></textarea>
 
             <label for="story-metrics">量化指标 (逗号分隔)</label>
             <input
@@ -208,7 +257,9 @@ onBeforeUnmount(() => setup.deactivate());
               <strong>{{ story.title }}</strong>
               <small>{{ story.project }}</small>
             </div>
-            <button class="quiet remove-story-btn" @click="setup.stories.splice(index, 1)">移除</button>
+            <button class="quiet remove-story-btn" @click="setup.stories.splice(index, 1)">
+              移除
+            </button>
           </article>
         </div>
       </section>
@@ -237,9 +288,18 @@ onBeforeUnmount(() => setup.deactivate());
               <span class="ai-pulse-dot"></span>
               岗位深度画像
             </span>
-            <h2 class="analysis-title">{{ setup.analysis?.summary ?? (analyzing ? '正在深度分析岗位要求…' : '岗位分析失败') }}</h2>
+            <h2 class="analysis-title">
+              {{
+                setup.analysis?.summary ?? (analyzing ? '正在深度分析岗位要求…' : '岗位分析失败')
+              }}
+            </h2>
           </div>
-          <button v-if="!analyzing" class="quiet reanalyze-btn" :disabled="setup.loading" @click="analyze">
+          <button
+            v-if="!analyzing"
+            class="quiet reanalyze-btn"
+            :disabled="setup.loading"
+            @click="analyze"
+          >
             重新分析
           </button>
         </div>
@@ -264,10 +324,7 @@ onBeforeUnmount(() => setup.deactivate());
             >
               <div class="section-heading">
                 <strong class="item-name">{{ item.competency }}</strong>
-                <span
-                  class="priority-chip"
-                  :class="item.priority"
-                >
+                <span class="priority-chip" :class="item.priority">
                   {{
                     item.priority === 'high'
                       ? '高优考查'
@@ -279,7 +336,9 @@ onBeforeUnmount(() => setup.deactivate());
               </div>
               <p class="item-summary">{{ item.summary }}</p>
               <div v-if="item.focusAreas.length" class="focus-tags">
-                <span v-for="focus in item.focusAreas" :key="focus" class="focus-chip">{{ focus }}</span>
+                <span v-for="focus in item.focusAreas" :key="focus" class="focus-chip">{{
+                  focus
+                }}</span>
               </div>
               <blockquote v-for="(evidence, index) in item.evidence" :key="index">
                 {{ evidence.quote }}
@@ -361,7 +420,12 @@ onBeforeUnmount(() => setup.deactivate());
           </div>
         </div>
 
-        <button class="primary start-btn" :disabled="setup.loading" :aria-busy="setup.loading" @click="start">
+        <button
+          class="primary start-btn"
+          :disabled="setup.loading"
+          :aria-busy="setup.loading"
+          @click="start"
+        >
           <span v-if="setup.loading" class="loading-spinner" aria-hidden="true"></span>
           {{ setup.loading ? 'AI 正在组卷与生成题目…' : '开始 AI 模拟面试 ›' }}
         </button>

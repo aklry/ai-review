@@ -27,8 +27,8 @@ const labels = { met: '已满足', missing: '未说明', incorrect: '存在错�
         <div class="item-head">
           <strong class="item-desc">
             {{
-              snapshot?.criteria.find((criterion) => criterion.id === item.criterionId)?.description ??
-              item.criterionId
+              snapshot?.criteria.find((criterion) => criterion.id === item.criterionId)
+                ?.description ?? item.criterionId
             }}
           </strong>
           <span class="rubric-status" :class="item.status">

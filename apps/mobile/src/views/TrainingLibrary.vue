@@ -101,11 +101,17 @@ onBeforeUnmount(() => {
       </div>
       <span class="daily-time-tag">3~5 分钟</span>
     </div>
-    <p class="daily-desc">无需准备简历，直接攻克一道高频核心考题。优先巩固待练薄弱项，答完秒出逐项评分。</p>
-    <router-link class="button-link primary-link daily-cta-btn" to="/learn/daily">开始今日练习 ›</router-link>
+    <p class="daily-desc">
+      无需准备简历，直接攻克一道高频核心考题。优先巩固待练薄弱项，答完秒出逐项评分。
+    </p>
+    <router-link class="button-link primary-link daily-cta-btn" to="/learn/daily"
+      >开始今日练习 ›</router-link
+    >
     <div class="actions daily-actions">
       <router-link class="button-link sub-action-btn" to="/learn">错题与收藏本</router-link>
-      <router-link class="button-link sub-action-btn" to="/learn?filter=progress">进步对比</router-link>
+      <router-link class="button-link sub-action-btn" to="/learn?filter=progress"
+        >进步对比</router-link
+      >
     </div>
   </section>
 
@@ -114,19 +120,23 @@ onBeforeUnmount(() => {
     <router-link
       :class="{ selected: selectedStatus === 'all' }"
       :to="{ path: '/records', query: { status: 'all' } }"
-    >全部</router-link>
+      >全部</router-link
+    >
     <router-link
       :class="{ selected: selectedStatus === 'active' }"
       :to="{ path: '/records', query: { status: 'active' } }"
-    >进行中</router-link>
+      >进行中</router-link
+    >
     <router-link
       :class="{ selected: selectedStatus === 'awaiting_finish' }"
       :to="{ path: '/records', query: { status: 'awaiting_finish' } }"
-    >待生成报告</router-link>
+      >待生成报告</router-link
+    >
     <router-link
       :class="{ selected: selectedStatus === 'completed' }"
       :to="{ path: '/records', query: { status: 'completed' } }"
-    >已完成</router-link>
+      >已完成</router-link
+    >
   </nav>
 
   <p v-if="busy" class="loading-status" role="status">
@@ -150,7 +160,9 @@ onBeforeUnmount(() => {
         }}
       </p>
       <div class="actions empty-actions">
-        <router-link v-if="historyMode" class="button-link primary-link" to="/prepare">新建训练</router-link>
+        <router-link v-if="historyMode" class="button-link primary-link" to="/prepare"
+          >新建训练</router-link
+        >
         <button @click="load()">刷新列表</button>
       </div>
     </section>
@@ -175,7 +187,13 @@ onBeforeUnmount(() => {
               <template v-if="row.company"> · {{ row.company }}</template>
             </small>
             <span class="record-status-pill" :class="row.status">
-              {{ row.status === 'completed' ? '已归档' : row.status === 'awaiting_finish' ? '待出报告' : '进行中' }}
+              {{
+                row.status === 'completed'
+                  ? '已归档'
+                  : row.status === 'awaiting_finish'
+                    ? '待出报告'
+                    : '进行中'
+              }}
             </span>
           </div>
 
@@ -190,9 +208,14 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="row record-footer-row">
-            <span class="progress-count">已答 {{ row.answeredMainQuestionCount }} / {{ row.mainQuestionCount }} 题</span>
+            <span class="progress-count"
+              >已答 {{ row.answeredMainQuestionCount }} / {{ row.mainQuestionCount }} 题</span
+            >
             <span v-if="row.status === 'completed'" class="score-chip">
-              评分 · <strong>{{ row.report?.overallScore ? Math.round(row.report.overallScore) : '未测评' }}</strong>
+              评分 ·
+              <strong>{{
+                row.report?.overallScore ? Math.round(row.report.overallScore) : '未测评'
+              }}</strong>
             </span>
             <strong class="action-label">{{ labels[row.status] }} ›</strong>
           </div>

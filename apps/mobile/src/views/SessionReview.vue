@@ -111,7 +111,13 @@ watch(
           <template v-if="data.company"> · {{ data.company }}</template>
         </small>
         <span class="status-chip" :class="data.status">
-          {{ data.status === 'completed' ? '测评已归档' : data.status === 'awaiting_finish' ? '待出完整报告' : '进行中' }}
+          {{
+            data.status === 'completed'
+              ? '测评已归档'
+              : data.status === 'awaiting_finish'
+                ? '待出完整报告'
+                : '进行中'
+          }}
         </span>
       </div>
 
@@ -140,7 +146,9 @@ watch(
     <template v-if="data.report">
       <section class="report-band ai-score-hero">
         <div class="score-hero-header">
-          <small class="score-version">AI 智能测评战报 · {{ data.report.scoringVersion ?? 'standard-v1' }}</small>
+          <small class="score-version"
+            >AI 智能测评战报 · {{ data.report.scoringVersion ?? 'standard-v1' }}</small
+          >
           <span class="status-badge" :class="data.report.assessmentStatus">
             {{ data.report.assessmentStatus === 'complete' ? '四维全测评' : '部分维度未测' }}
           </span>
@@ -191,7 +199,9 @@ watch(
           >
             <div class="score-item-top">
               <span class="competency-name">{{ competency }}</span>
-              <strong class="competency-val">{{ score === null ? '未测评' : String(score) + ' / 5' }}</strong>
+              <strong class="competency-val">{{
+                score === null ? '未测评' : String(score) + ' / 5'
+              }}</strong>
             </div>
             <progress v-if="score !== null" max="5" :value="score"></progress>
           </article>
@@ -266,8 +276,12 @@ watch(
             <h3 class="q-prompt-title">{{ q.prompt }}</h3>
           </div>
           <div class="q-score-badge">
-            <strong v-if="q.answer?.cue" class="q-score-val">{{ q.answer.cue.score }} <span class="denom">/ 5</span></strong>
-            <span v-else class="q-status-text">{{ q.skippedAt ? '已跳过' : q.answer ? '暂无评分' : '未作答' }}</span>
+            <strong v-if="q.answer?.cue" class="q-score-val"
+              >{{ q.answer.cue.score }} <span class="denom">/ 5</span></strong
+            >
+            <span v-else class="q-status-text">{{
+              q.skippedAt ? '已跳过' : q.answer ? '暂无评分' : '未作答'
+            }}</span>
           </div>
         </div>
 
@@ -289,7 +303,12 @@ watch(
             >
               已收藏 · 去重答与对比 ›
             </router-link>
-            <button v-else class="collect-btn" :disabled="learningBusy[q.id]" @click="collectQuestion(q.id)">
+            <button
+              v-else
+              class="collect-btn"
+              :disabled="learningBusy[q.id]"
+              @click="collectQuestion(q.id)"
+            >
               {{ learningBusy[q.id] ? '正在收藏…' : '⭐ 收藏到练习本' }}
             </button>
             <p v-if="learningError[q.id]" role="alert">{{ learningError[q.id] }}</p>
@@ -338,9 +357,15 @@ watch(
             </details>
 
             <!-- 参考答案展开 -->
-            <details v-if="q.answer.cue.referenceAnswer" class="reference-disclosure" @toggle="markReference($event, q.id)">
+            <details
+              v-if="q.answer.cue.referenceAnswer"
+              class="reference-disclosure"
+              @toggle="markReference($event, q.id)"
+            >
               <summary>查看本题参考答案</summary>
-              <p v-if="q.referenceViewedAt" class="muted viewed-hint">曾在此场练习中查看过参考答案</p>
+              <p v-if="q.referenceViewedAt" class="muted viewed-hint">
+                曾在此场练习中查看过参考答案
+              </p>
               <p v-if="disputeStatus[q.id]" role="status">{{ disputeStatus[q.id] }}</p>
               <ReferenceAnswer :answer="q.answer.cue.referenceAnswer" />
             </details>
@@ -395,11 +420,13 @@ watch(
                     encodeURIComponent(data.language)
                   "
                 >
-                  🎯 {{
+                  🎯
+                  {{
                     q.rubricSnapshot?.criteria.find(
                       (criterion) => criterion.id === item.criterionId,
                     )?.description ?? item.criterionId
-                  }} · 针对练习
+                  }}
+                  · 针对练习
                 </router-link>
               </template>
             </nav>
