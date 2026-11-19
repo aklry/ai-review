@@ -1,6 +1,7 @@
 import { transcribeWav } from './speech.js';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { fileURLToPath } from 'node:url';
+import appIcon from '../../build/icon.png?asset';
 import {
   configureElectronRuntime,
   shouldOpenDevTools,
@@ -19,6 +20,7 @@ function createWindow(): void {
     height: 820,
     minWidth: 1024,
     minHeight: 680,
+    icon: appIcon,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -26,6 +28,8 @@ function createWindow(): void {
       sandbox: shouldUseRendererSandbox(rendererUrl),
     },
   });
+
+  if (process.platform !== 'darwin') window.removeMenu();
 
   window.webContents.on(
     'did-fail-load',

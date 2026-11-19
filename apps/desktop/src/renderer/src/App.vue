@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
+import appIcon from '../../../build/icon.png';
 
 const route = useRoute();
 const activeRoute = computed(() => (route.path.startsWith('/history') ? '/history' : route.path));
@@ -10,7 +11,7 @@ const activeRoute = computed(() => (route.path.startsWith('/history') ? '/histor
   <el-container class="app-layout">
     <el-aside class="sidebar" width="224px">
       <div class="brand">
-        <span class="brand-mark">IA</span>
+        <img class="brand-mark" :src="appIcon" alt="" width="31" height="31" />
         <div>
           <strong>Interview Assistant</strong>
           <small>Frontend + AI</small>

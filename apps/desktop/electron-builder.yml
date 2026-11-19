@@ -6,11 +6,13 @@ files:
   - out/**/*
   - package.json
 win:
+  icon: build/icon.ico
   target:
     - target: nsis
       arch:
         - x64
 nsis:
+  uninstallerIcon: build/icon.ico
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
