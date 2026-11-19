@@ -255,19 +255,39 @@ export class InterviewRepository {
     return result.count === 1;
   }
 
-  createStory(profileId: string, input: StoryInput) {
-    return this.prisma.story.create({
-      data: {
-        profileId,
-        title: input.title,
-        project: input.project,
-        situation: input.situation,
-        task: input.task,
-        action: input.action,
-        result: input.result,
-        metrics: input.metrics,
-      },
-    });
+  async createStory(profileId: string, input: StoryInput) {
+    const data = {
+      profileId,
+      title: input.title,
+      project: input.project,
+      situation: input.situation,
+      task: input.task,
+      action: input.action,
+      result: input.result,
+      metrics: input.metrics,
+    };
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.prisma.$transaction(
+          async ({ story }) => {
+            const existing = await story.findFirst({
+              where: { ...data, metrics: { equals: data.metrics } },
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            });
+            return existing ?? story.create({ data });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        // A concurrent insert can abort this transaction. Re-read in a new transaction.
+        if (
+          attempt >= 3 ||
+          !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+          error.code !== 'P2034'
+        )
+          throw error;
+      }
+    }
   }
 
   getProfile(profileId: string) {

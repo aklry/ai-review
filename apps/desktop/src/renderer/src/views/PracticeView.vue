@@ -1,18 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import {
-  practiceTaskSchema,
-  type PracticeTaskView,
-  type CoachingCue,
-} from '@interview-assistant/contracts';
-import { request } from '../lib/http.js';
+import { computed, onBeforeUnmount, watch } from 'vue';
+import { storeToRefs } from 'pinia';
+import type { CoachingCue } from '@interview-assistant/contracts';
 import ReferenceAnswer from '../components/ReferenceAnswer.vue';
 import RubricFeedback from '../components/RubricFeedback.vue';
+import { usePracticeStore } from '../stores/practice.js';
+
 const props = defineProps<{ sessionId: string; questionId: string; criterionId: string }>();
-const task = ref<PracticeTaskView | null>(null),
-  answer = ref(''),
-  busy = ref(false),
-  error = ref('');
+const practice = usePracticeStore();
+const { task, answer, busy, needsSync, error, storageError, earlierDrafts } = storeToRefs(practice);
 const labels = ['原题重答', '案例练习', '变式复测'];
 const statuses = { met: '已满足', missing: '未说明', incorrect: '存在错误', unclear: '需要澄清' };
 function statusFor(cue: CoachingCue, id: string) {
@@ -22,50 +18,12 @@ function statusFor(cue: CoachingCue, id: string) {
 const focus = computed(
   () => task.value?.snapshot.criteria.find((c) => c.id === task.value?.criterionId)?.description,
 );
-let generation = 0;
-async function load() {
-  const n = ++generation;
-  task.value = null;
-  busy.value = true;
-  error.value = '';
-  answer.value = '';
-  try {
-    const data = await request({
-      method: 'POST',
-      url: '/questions/' + encodeURIComponent(props.questionId) + '/practice',
-      data: { criterionId: props.criterionId },
-    });
-    if (n === generation) task.value = practiceTaskSchema.parse(data);
-  } catch (e) {
-    if (n === generation) error.value = e instanceof Error ? e.message : '加载失败';
-  } finally {
-    if (n === generation) busy.value = false;
-  }
-}
-watch(() => [props.questionId, props.criterionId], load, { immediate: true });
-async function submit() {
-  const current = task.value,
-    n = generation;
-  if (!current || busy.value || !answer.value.trim()) return;
-  busy.value = true;
-  error.value = '';
-  try {
-    const data = await request({
-      method: 'POST',
-      url: '/practice/' + current.id + '/answers',
-      data: { stage: current.stage, answerText: answer.value },
-      timeout: 300000,
-    });
-    if (n === generation) {
-      task.value = practiceTaskSchema.parse(data);
-      answer.value = '';
-    }
-  } catch (e) {
-    if (n === generation) error.value = e instanceof Error ? e.message : '提交失败';
-  } finally {
-    if (n === generation) busy.value = false;
-  }
-}
+watch(
+  () => [props.questionId, props.criterionId] as const,
+  ([questionId, criterionId]) => void practice.open(questionId, criterionId),
+  { immediate: true },
+);
+onBeforeUnmount(practice.leave);
 const results = computed(() =>
   task.value
     ? [task.value.original, ...task.value.attempts].map((attempt, i) => ({
@@ -79,7 +37,7 @@ const results = computed(() =>
 );
 </script>
 <template>
-  <section class="view history-view">
+  <section class="view history-view" :aria-busy="busy">
     <header class="view-header">
       <div>
         <p class="eyebrow">专项练习</p>
@@ -88,8 +46,16 @@ const results = computed(() =>
       <RouterLink :to="'/history/' + sessionId">返回复盘</RouterLink>
     </header>
     <p v-if="error" role="alert">
-      {{ error }} <button :disabled="busy" @click="load">重新载入</button>
+      {{ error }}
+      <el-button v-if="needsSync" :disabled="busy" @click="practice.sync">
+        {{ task ? '同步练习进度' : '重新载入' }}
+      </el-button>
     </p>
+    <p v-if="storageError" role="status">{{ storageError }}</p>
+    <details v-for="draft in earlierDrafts" :key="draft.stage" class="history-card">
+      <summary>{{ labels[draft.stage] }}的本机草稿（未提交）</summary>
+      <p class="review-answer">{{ draft.text }}</p>
+    </details>
     <template v-if="task"
       ><article v-if="task.prompt" class="history-card">
         <h2>{{ labels[task.stage] }} · {{ task.stage + 1 }} / 3</h2>
@@ -100,14 +66,19 @@ const results = computed(() =>
         </p>
         <p>{{ task.prompt }}</p>
         <el-input
-          v-model="answer"
+          :model-value="answer"
           type="textarea"
           :rows="7"
           maxlength="20000"
           aria-label="练习回答"
           :disabled="busy"
+          @update:model-value="practice.edit"
         />
-        <el-button type="primary" :disabled="busy || !answer.trim()" :loading="busy" @click="submit"
+        <el-button
+          type="primary"
+          :disabled="busy || needsSync || !answer.trim()"
+          :loading="busy"
+          @click="practice.submit"
           >提交回答</el-button
         >
       </article>

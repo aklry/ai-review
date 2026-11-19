@@ -100,6 +100,33 @@ describe.skipIf(!connectionString)('PostgreSQL workflow integration (isolated sc
     ).toBe('legacy-q1');
   }, 30_000);
 
+  it('reuses identical STAR experiences under concurrent retries and preserves distinct stories', async () => {
+    const repository = new InterviewRepository(prisma as PrismaService);
+    const profile = await repository.createProfile({ resumeText });
+    const story = {
+      title: 'Improve performance',
+      project: 'Dashboard',
+      situation: 'Slow first render',
+      task: 'Reduce LCP',
+      action: 'Split the route bundle',
+      result: 'Reduced LCP to 2.1s',
+      metrics: ['LCP 2.1s', '77 KB saved'],
+    };
+
+    const concurrent = await Promise.all(
+      Array.from({ length: 4 }, () => repository.createStory(profile.id, story)),
+    );
+    expect(new Set(concurrent.map(({ id }) => id)).size).toBe(1);
+    await expect(repository.createStory(profile.id, story)).resolves.toEqual(concurrent[0]);
+    await repository.createStory(profile.id, { ...story, metrics: [] });
+    expect(await prisma.story.count({ where: { profileId: profile.id } })).toBe(2);
+
+    const otherProfile = await repository.createProfile({ resumeText });
+    const existing = await prisma.story.create({ data: { profileId: otherProfile.id, ...story } });
+    await expect(repository.createStory(otherProfile.id, story)).resolves.toEqual(existing);
+    expect(existing.id).not.toBe(concurrent[0]?.id);
+  }, 30_000);
+
   it('resumes a failed graph with a new PostgreSQL saver without repeating completed agents', async () => {
     const calls: string[] = [];
     let failJob = true;

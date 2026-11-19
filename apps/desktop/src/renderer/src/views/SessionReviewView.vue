@@ -32,6 +32,19 @@ const orphanFollowUps = computed(
         !review.value!.questions.some((parent) => parent.id === q.parentQuestionId),
     ) ?? [],
 );
+const questionDirectory = computed(() => [
+  ...groups.value.flatMap(({ question, number, followUps }) => [
+    { question, label: `主问题 ${number}`, followUp: false },
+    ...followUps.map((question) => ({ question, label: '追问', followUp: true })),
+  ]),
+  ...orphanFollowUps.value.map((question) => ({ question, label: '历史追问', followUp: false })),
+]);
+const questionAnchor = (id: string) => `review-question-${id}`;
+function jumpToQuestion(id: string) {
+  const question = document.getElementById(questionAnchor(id));
+  question?.focus({ preventScroll: true });
+  question?.scrollIntoView({ block: 'start' });
+}
 const days = computed(() =>
   [...(review.value?.report?.nextPlan ?? [])].sort((a, b) => a.day - b.day),
 );
@@ -152,34 +165,128 @@ onBeforeUnmount(history.cancelReview);
       </section>
       <p v-else class="history-muted">这场训练尚未生成报告，已保存的问答和反馈仍可逐题查看。</p>
       <PracticeLinks :session-id="review.id" :review="review" />
-      <div class="history-list" aria-label="完整问答与反馈">
-        <section v-for="group in groups" :key="group.question.id" class="question-group">
+      <div v-if="questionDirectory.length" class="review-questions">
+        <nav aria-labelledby="review-directory-title" class="history-card review-directory">
+          <h2 id="review-directory-title">题目目录</h2>
+          <ul>
+            <li v-for="{ question, label, followUp } in questionDirectory" :key="question.id">
+              <button
+                type="button"
+                :class="{ 'directory-followup': followUp }"
+                :aria-controls="questionAnchor(question.id)"
+                @click="jumpToQuestion(question.id)"
+              >
+                <span>{{ label }}</span>
+                <span class="directory-prompt">{{ question.prompt }}</span>
+              </button>
+            </li>
+          </ul>
+        </nav>
+        <div class="history-list" aria-label="完整问答与反馈">
+          <section v-for="group in groups" :key="group.question.id" class="question-group">
+            <QuestionReviewCard
+              :id="questionAnchor(group.question.id)"
+              tabindex="-1"
+              :active-practice="review.status === 'active' && review.feedbackPolicy === 'immediate'"
+              :question="group.question"
+              :label="`主问题 ${group.number}`"
+            />
+            <QuestionReviewCard
+              v-for="followUp in group.followUps"
+              :id="questionAnchor(followUp.id)"
+              :key="followUp.id"
+              tabindex="-1"
+              :question="followUp"
+              :label="
+                `主问题 ${group.number} 的追问` +
+                (group.question.referenceViewedAt &&
+                followUp.answer &&
+                Date.parse(group.question.referenceViewedAt) <=
+                  Date.parse(followUp.answer.createdAt)
+                  ? ' · 看过主问题参考答案后作答'
+                  : '')
+              "
+            />
+          </section>
           <QuestionReviewCard
-            :active-practice="review.status === 'active' && review.feedbackPolicy === 'immediate'"
-            :question="group.question"
-            :label="`主问题 ${group.number}`"
-          />
-          <QuestionReviewCard
-            v-for="followUp in group.followUps"
+            v-for="followUp in orphanFollowUps"
+            :id="questionAnchor(followUp.id)"
             :key="followUp.id"
+            tabindex="-1"
             :question="followUp"
-            :label="
-              `主问题 ${group.number} 的追问` +
-              (group.question.referenceViewedAt &&
-              followUp.answer &&
-              Date.parse(group.question.referenceViewedAt) <= Date.parse(followUp.answer.createdAt)
-                ? ' · 看过主问题参考答案后作答'
-                : '')
-            "
+            label="历史追问"
           />
-        </section>
-        <QuestionReviewCard
-          v-for="followUp in orphanFollowUps"
-          :key="followUp.id"
-          :question="followUp"
-          label="历史追问"
-        />
+        </div>
       </div>
     </template>
   </section>
 </template>
+
+<style scoped>
+.review-questions {
+  display: grid;
+  grid-template-columns: minmax(168px, 1fr) minmax(0, 3fr);
+  align-items: start;
+  gap: 18px;
+}
+.review-directory {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 16px;
+}
+.review-directory h2 {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+.review-directory ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.review-directory button {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.review-directory button:hover {
+  background: #f0f5fa;
+}
+.review-directory .directory-followup {
+  padding-left: 20px;
+}
+.directory-prompt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: #536574;
+}
+.question-review {
+  scroll-margin-top: 12px;
+}
+.review-directory button:focus-visible,
+.question-review:focus-visible {
+  outline: 2px solid #3473b8;
+  outline-offset: 2px;
+}
+@media (max-width: 1100px) {
+  .review-questions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .review-directory {
+    position: static;
+    max-height: 16rem;
+  }
+}
+</style>

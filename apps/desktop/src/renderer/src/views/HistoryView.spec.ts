@@ -133,7 +133,13 @@ describe('history and review views', () => {
     expect(html).toContain('第二条证据');
     expect(html).toContain('未作答');
     expect(html).toContain('主问题 1 的追问');
-    expect(html.indexOf('你如何测量？')).toBeLessThan(html.indexOf('设计缓存系统'));
+    expect(html).toContain('题目目录');
+    for (const id of ['q1', 'q2', 'followup']) {
+      expect(html).toContain(`aria-controls="review-question-${id}"`);
+      expect(html).toContain(`id="review-question-${id}" tabindex="-1"`);
+    }
+    const questions = html.slice(html.indexOf('aria-label="完整问答与反馈"'));
+    expect(questions.indexOf('你如何测量？')).toBeLessThan(questions.indexOf('设计缓存系统'));
     expect(html).toContain('sessionId=s1');
   });
 });
